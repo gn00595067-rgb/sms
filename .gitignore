@@ -1,0 +1,23 @@
+# secrets / 個資
+.streamlit/secrets.toml
+seed_passwords.local.txt
+*.local.*
+.env
+
+# 公司資料（舊系統匯出）
+legacy_csv/
+*.mdb
+*.accdb
+backup_*.zip
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# editors / os
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

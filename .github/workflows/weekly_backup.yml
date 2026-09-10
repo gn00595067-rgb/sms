@@ -1,0 +1,29 @@
+name: weekly-backup
+
+# 每週日 18:00 UTC（台灣週一 02:00）備份非 legacy 表，zip 保留 90 天。
+# 需要 repo secret：DATABASE_URL（Settings → Secrets and variables → Actions）。
+on:
+  schedule:
+    - cron: "0 18 * * 0"
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install "psycopg[binary]>=3.2"
+      - name: Run backup
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scripts/backup.py --out backups
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-mvp-backup
+          path: backups/*.zip
+          retention-days: 90

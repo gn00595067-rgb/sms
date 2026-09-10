@@ -1,0 +1,168 @@
+"""
+registry.py — 報表定義
+
+每張報表一個 dict。新增報表 = sql/00N_xxx.sql 加 view + 這裡加一筆 + 附錄 C 補標籤。
+（見 docs/HOW_TO_ADD_REPORT.md）
+
+mode:
+  "aggregate" — 來源是 row-level view（v_deal_line_flat），依 group_by_options 動態彙總。
+  "direct"    — 來源是已彙總 view，直接篩選 + 顯示。
+"""
+from __future__ import annotations
+
+ALL_ROLES = ["MEDIA", "FINANCE", "EXEC", "SALES"]
+
+REPORTS: dict[str, dict] = {
+    "cost_profit": {
+        "title": "成本毛利分析",
+        "view": "v_deal_line_flat",
+        "mode": "aggregate",
+        "filters": ["ym_range", "company", "platform_group", "platform", "region",
+                    "salesperson", "business_group", "sales_category", "customer", "industry", "line_type"],
+        "group_by_options": {
+            "月": ["perf_ym_text"],
+            "月×公司": ["perf_ym_text", "company"],
+            "月×公司×平台歸類": ["perf_ym_text", "company", "platform_group"],
+            "月×公司×平台": ["perf_ym_text", "company", "platform_group", "platform"],
+            "季×公司": ["perf_year", "perf_quarter", "company"],
+            "客戶": ["customer"],
+            "業務": ["salesperson"],
+            "明細": None,
+        },
+        "measures": ["line_count", "deal_count", "gross_amount", "net_amount", "cost_amount",
+                     "gross_profit", "margin_pct"],
+        "detail_columns": ["perf_ym_text", "contract_no", "company", "customer", "salesperson",
+                           "platform_group", "platform", "media_channel", "line_type",
+                           "gross_amount", "rebate_pct", "net_amount", "cost_amount", "gross_profit", "margin_pct"],
+        "default_sort": [("perf_ym_text", "asc")],
+        "totals": True,
+        "roles": ALL_ROLES,
+        "sales_scope": True,
+    },
+    "two_layer": {
+        "title": "雙層毛利（平台 × 月）",
+        "view": "v_profit_two_layer",
+        "mode": "direct",
+        "filters": ["ym_range", "platform_group"],
+        "columns": ["perf_ym_text", "platform_group", "layer1_revenue", "layer1_cost", "layer1_profit",
+                    "layer2_revenue", "layer2_direct_cost", "fixed_cost", "layer2_profit"],
+        "default_sort": [("perf_ym_text", "asc"), ("platform_group", "asc")],
+        "sum_cols": ["layer1_revenue", "layer1_cost", "layer1_profit", "layer2_revenue",
+                     "layer2_direct_cost", "fixed_cost", "layer2_profit"],
+        "totals": True,
+        "roles": ["MEDIA", "FINANCE", "EXEC"],
+        "sales_scope": False,
+        "note": "第一層＝子公司（東吳/鉑霖/瑞迪）對客戶線的除佣實收−實付；"
+                "第二層＝聲活線＋轉撥線的除佣實收−實付−該月平台歸類固定成本。此定義為假設，待 Peggy 姐確認（docs/ASSUMPTIONS.md）。",
+    },
+    "media_volume": {
+        "title": "媒體發稿量與秒數",
+        "view": "v_media_volume",
+        "mode": "direct",
+        "filters": ["ym_range", "company", "platform_group", "platform", "region"],
+        "columns": ["perf_ym_text", "company", "platform_group", "platform", "region",
+                    "line_count", "deal_count", "total_frames", "total_seconds",
+                    "purchased_slots", "bonus_slots", "blink_slots", "net_amount"],
+        "default_sort": [("perf_ym_text", "asc"), ("platform", "asc")],
+        "sum_cols": ["line_count", "deal_count", "total_frames", "total_seconds",
+                     "purchased_slots", "bonus_slots", "blink_slots", "net_amount"],
+        "totals": True,
+        "roles": ["MEDIA", "FINANCE", "EXEC"],
+        "sales_scope": False,
+    },
+    "recognition": {
+        "title": "業績認定表",
+        "view": "v_sales_recognition",
+        "mode": "direct",
+        "filters": ["ym_range", "company", "salesperson"],
+        "columns": ["perf_ym_text", "salesperson", "business_group", "company", "sales_item",
+                    "sales_category", "recognition_ratio", "deal_count",
+                    "gross_amount", "net_amount", "cost_amount", "gross_profit", "recognized_amount"],
+        "default_sort": [("perf_ym_text", "asc"), ("salesperson", "asc")],
+        "sum_cols": ["deal_count", "gross_amount", "net_amount", "cost_amount", "gross_profit", "recognized_amount"],
+        "totals": True,
+        "roles": ALL_ROLES,
+        "sales_scope": True,
+    },
+    "custom_range": {
+        "title": "業績成本報表（自訂區間）",
+        "view": "v_deal_line_flat",
+        "mode": "aggregate",
+        "filters": ["ym_range", "company", "platform_group", "platform", "region",
+                    "salesperson", "business_group", "sales_category", "customer", "industry", "line_type"],
+        "group_by_options": {
+            "月×公司": ["perf_ym_text", "company"],
+            "季×公司": ["perf_year", "perf_quarter", "company"],
+            "公司": ["company"],
+            "平台歸類": ["platform_group"],
+            "業務": ["salesperson"],
+            "客戶": ["customer"],
+            "明細": None,
+        },
+        "measures": ["line_count", "deal_count", "gross_amount", "net_amount", "cost_amount",
+                     "gross_profit", "margin_pct"],
+        "detail_columns": ["perf_ym_text", "contract_no", "company", "customer", "salesperson",
+                           "platform_group", "platform", "line_type",
+                           "gross_amount", "net_amount", "cost_amount", "gross_profit", "margin_pct"],
+        "default_sort": [("perf_ym_text", "asc")],
+        "totals": True,
+        "roles": ALL_ROLES,
+        "sales_scope": True,
+    },
+    "ar_aging": {
+        "title": "應收 / 逾期帳款",
+        "view": "v_ar_open",
+        "mode": "direct",
+        "filters": ["salesperson", "customer"],
+        "only_open": True,
+        "columns": ["invoice_no", "contract_no", "customer", "salesperson", "ad_name",
+                    "invoice_issued_on", "expected_cash_on", "amount_total", "received_amount",
+                    "outstanding_amount", "overdue_days"],
+        "default_sort": [("overdue_days", "desc")],
+        "sum_cols": ["amount_total", "received_amount", "outstanding_amount"],
+        "aging_col": "overdue_days",
+        "totals": True,
+        "roles": ["FINANCE", "EXEC", "SALES"],
+        "sales_scope": True,
+    },
+    "bonus": {
+        "title": "業務獎金（簡易）",
+        "view": "v_bonus_simple",
+        "mode": "direct",
+        "filters": ["ym_range", "salesperson", "platform_group"],
+        "columns": ["perf_ym_text", "salesperson", "business_group", "platform_group", "sales_item",
+                    "net_amount", "gross_profit", "bonus_pct", "threshold_amount", "bonus_amount", "rule_note"],
+        "default_sort": [("salesperson", "asc"), ("platform_group", "asc")],
+        "sum_cols": ["net_amount", "gross_profit", "bonus_amount"],
+        "totals": True,
+        "roles": ["EXEC", "SALES"],
+        "sales_scope": True,
+        "note": "MVP 只實作第一層業務獎金（業務 × 平台歸類 × 業績項目 × 生效區間 × %、門檻）；"
+                "主管/協辦/客服/專案/加碼獎金尚未實作。",
+    },
+    "customer_rank": {
+        "title": "客戶排名與佔比",
+        "view": "v_customer_ranking",
+        "mode": "direct",
+        "filters": ["perf_year", "company"],
+        "columns": ["perf_year", "company", "rank_in_company", "customer", "deal_count",
+                    "net_amount", "gross_profit", "share_in_company"],
+        "default_sort": [("rank_in_company", "asc")],
+        "sum_cols": ["net_amount", "gross_profit"],
+        "top_n": True,
+        "totals": True,
+        "roles": ALL_ROLES,
+        "sales_scope": True,
+    },
+}
+
+
+def report(key: str) -> dict:
+    if key not in REPORTS:
+        raise KeyError(f"未知報表：{key}")
+    return REPORTS[key]
+
+
+def reports_for_role(role: str) -> list[tuple[str, str]]:
+    """回傳該角色可看的 [(key, title)]。"""
+    return [(k, r["title"]) for k, r in REPORTS.items() if role in r["roles"]]
