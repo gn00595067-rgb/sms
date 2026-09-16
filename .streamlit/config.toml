@@ -9,3 +9,6 @@ maxUploadSize = 50
 
 [browser]
 gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"

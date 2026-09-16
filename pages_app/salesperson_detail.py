@@ -20,24 +20,28 @@ if scope == "":
     st.info("你的帳號尚未綁定業務，無法檢視業務頁。")
     st.stop()
 
-if scope:
-    salespeople = [scope]
-else:
-    sl = query_df("select distinct salesperson from v_deal_summary where salesperson is not null and not is_house order by salesperson")
-    salespeople = sl["salesperson"].tolist() if not sl.empty else []
+salespeople = A.active_salespeople(user)     # 排除停用 / 單字垃圾名 / 公司戶（P0-6）
 if not salespeople:
     st.info("查無業務資料。")
     st.stop()
-
-focus = st.session_state.get("salesperson_focus")
-idx = salespeople.index(focus) if focus in salespeople else 0
-sp = st.selectbox("業務", salespeople, index=idx, key="spd_sp")
-st.session_state["salesperson_focus"] = sp
 
 ao = A.as_of()
 year = ao["as_of_year"]
 yf, yt = date(year, 1, 1), ao["as_of_ym"]
 pf, pt = A.prev_window(yf, yt)
+
+# 預設：本期金額最大的業務（P0-6）
+focus = st.session_state.get("salesperson_focus")
+if focus not in salespeople:
+    biggest = query_df(
+        """select salesperson from v_deal_summary where not is_barter and not is_house
+           and perf_ym between %s and %s group by salesperson order by sum(ext_net) desc nulls last limit 1""",
+        (yf, yt))
+    if not biggest.empty and biggest.iloc[0]["salesperson"] in salespeople:
+        focus = biggest.iloc[0]["salesperson"]
+idx = salespeople.index(focus) if focus in salespeople else 0
+sp = st.selectbox("業務", salespeople, index=idx, key="spd_sp")
+st.session_state["salesperson_focus"] = sp
 
 # ---- KPI ----
 cur = query_df(
@@ -53,6 +57,9 @@ A.kpi_row([
     {"label": f"本期 {year}/01–{ym_text(yt)}", "value": money(cur_net),
      "delta": (cur_net - prev_net) / prev_net if prev_net else None,
      "sub": f"帳上毛利 {money(float(cur['bp']))}（{pct(float(cur['bp'])/cur_net) if cur_net else '–'}）"},
+    {"label": "去年同段", "value": money(prev_net)},
+    {"label": "差異", "value": money(cur_net - prev_net),
+     "sub": f"{pct((cur_net-prev_net)/prev_net) if prev_net else '新'}"},
     {"label": "客戶數", "value": f"{int(cur['cust'])}"},
     {"label": "訂單數", "value": f"{int(cur['deals'])}", "sub": f"平均單筆 {money(cur_net/int(cur['deals'])) if int(cur['deals']) else '–'}"},
 ])
@@ -67,8 +74,9 @@ mrows = query_df(
     (sp, yf, yt))
 months = A.month_range(yf, yt)
 net_by = {r["perf_ym"]: float(r["net"] or 0) for _, r in mrows.iterrows()} if not mrows.empty else {}
-fig = go.Figure(go.Bar(x=[ym_text(m) for m in months], y=[net_by.get(m, 0) for m in months], marker_color=COLORS["accent"]))
+fig = go.Figure(go.Bar(x=[ym_text(m) for m in months], y=[net_by.get(m, 0) / 10000 for m in months], marker_color=COLORS["accent"]))
 fig.update_layout(height=260, margin=dict(l=8, r=8, t=8, b=8), font=dict(family="Noto Sans TC, Microsoft JhengHei"))
+fig.update_yaxes(ticksuffix="萬", tickformat=",.0f")
 st.plotly_chart(fig, use_container_width=True)
 
 # ---- 客戶組合（前 10 大） ----
@@ -92,6 +100,8 @@ if not cur_c.empty:
         ("customer", "客戶", "text"), ("net", "除佣實收", "money"),
         ("同期%", "同期%", "pct"), ("佔該業務%", "佔該業務%", "progress", {"max": float(cur_c["佔該業務%"].max())}),
     ], height=None, key="spd_cust")
+else:
+    st.caption("本期無客戶。")
 
 # ---- 新客與流失風險 ----
 c1, c2 = st.columns(2)

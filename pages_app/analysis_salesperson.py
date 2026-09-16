@@ -49,31 +49,46 @@ A.kpi_row([
 
 st.divider()
 
-# ---- 排名表 ----
+# ---- 排名表（精簡欄，可展開全部）----
 st.markdown("**業務排名**（點一列 → 業務頁）")
-mxnet = float(nonh["ext_net"].max()) if n else 1.0
+show_all = st.toggle("顯示全部欄位", value=False, key="sp_allcols")
 nonh["mix"] = nonh.apply(lambda r: A.platform_mix_text(r["net_cp"], r["net_fresh"], r["net_radio"], r["net_other"]), axis=1)
-event = A.show_ranking(nonh, [
-    ("rank_in_year", "#", "int"),
+share_max = float(nonh["share"].max()) if n else 1.0
+slim = [
+    ("rank_in_year", "#", "int", {"width": "small"}),
     ("salesperson", "業務", "text"),
-    ("main_company", "公司", "text"),
+    ("main_company", "公司", "text", {"width": "small"}),
+    ("ext_net", "除佣實收", "money"),
+    ("share", "佔比", "progress", {"max": share_max}),
+    ("yoy_text", "同期%", "text", {"width": "small"}),
+    ("booked_margin", "毛利率", "pct", {"width": "small"}),
+    ("net_margin", "淨利率", "pct", {"width": "small"}),
+    ("customers", "客戶數", "int", {"width": "small"}),
+    ("new_customers", "新客", "int", {"width": "small"}),
+    ("top3_share", "前3大依賴度", "pct"),
+]
+full = [
+    ("rank_in_year", "#", "int", {"width": "small"}),
+    ("salesperson", "業務", "text"),
+    ("main_company", "公司", "text", {"width": "small"}),
     ("main_group", "組別", "text"),
-    ("ext_net", "除佣實收", "progress", {"max": mxnet}),
-    ("yoy_pct", "同期%", "pct"),
-    ("share", "佔比", "pct"),
+    ("ext_net", "除佣實收", "money"),
+    ("share", "佔比", "progress", {"max": share_max}),
+    ("yoy_text", "同期%", "text", {"width": "small"}),
     ("booked_profit", "帳上毛利", "money"),
     ("booked_margin", "毛利率", "pct"),
-    ("net_margin", "集團淨利率", "pct"),
+    ("net_margin", "淨利率", "pct"),
     ("recognized_amount", "認定業績", "money"),
-    ("customers", "客戶數", "int"),
-    ("new_customers", "新客", "int"),
-    ("deals", "訂單數", "int"),
+    ("customers", "客戶數", "int", {"width": "small"}),
+    ("new_customers", "新客", "int", {"width": "small"}),
+    ("deals", "訂單數", "int", {"width": "small"}),
     ("avg_deal", "平均單筆", "money"),
     ("top3_share", "前3大依賴度", "pct"),
     ("top_customer", "最大客戶", "text"),
     ("mix", "平台組合", "text"),
     ("barter_net", "交換", "money"),
-], key="sp_rank", on_select="rerun")
+]
+event = A.show_ranking(nonh, full if show_all else slim, key="sp_rank", on_select="rerun")
 
 if event and getattr(event, "selection", None) and event.selection.get("rows"):
     idx = event.selection["rows"][0]
@@ -91,24 +106,29 @@ if not house.empty:
 xcols = ["rank_in_year", "salesperson", "main_company", "main_group", "ext_net", "yoy_pct",
          "share", "booked_profit", "booked_margin", "net_margin", "recognized_amount",
          "customers", "new_customers", "deals", "avg_deal", "top3_share", "barter_net"]
-st.download_button("⬇ 下載 Excel", data=build_excel(nonh[xcols], "業務分析", A.filter_text(f), columns=xcols),
+st.download_button("⬇ 下載 Excel（單位：元）",
+                   data=build_excel(nonh[xcols], "業務分析", A.filter_text(f) + "　單位：元", columns=xcols),
                    file_name="analysis_salesperson.xlsx",
                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-# ---- 業務 × 月 熱圖 ----
+# ---- 業務 × 月 熱圖（含數字與合計，單位：萬）----
 st.divider()
-st.markdown("**業務 × 月 熱圖**（前 8 名，顏色深 = 金額大）")
+st.markdown("**業務 × 月 熱圖**（前 8 名，顏色深 = 金額大；數字為萬）")
 top8 = nonh.head(8)["salesperson"].tolist()
 if top8:
     hm = A.load_deals(f["ym_from"], f["ym_to"], f, exclude_barter=True, user=user)
     hm = hm[hm["salesperson"].isin(top8)].copy()
     hm["month"] = hm["perf_ym"].map(lambda d: f"{d.month}月")
     months = [f"{m.month}月" for m in A.month_range(f["ym_from"], f["ym_to"])]
-    pv = hm.pivot_table(index="salesperson", columns="month", values="ext_net", aggfunc="sum").reindex(index=top8, columns=months).fillna(0)
-    fig = px.imshow(pv.values / 10000, x=months, y=top8, color_continuous_scale="Blues", aspect="auto",
-                    labels=dict(color="萬"))
-    fig.update_layout(height=max(240, 34 * len(top8)), margin=dict(l=8, r=8, t=8, b=8),
-                      font=dict(family="Noto Sans TC, Microsoft JhengHei"))
+    pv = (hm.pivot_table(index="salesperson", columns="month", values="ext_net", aggfunc="sum")
+          .reindex(index=top8, columns=months).fillna(0) / 10000)
+    pv["合計"] = pv.sum(axis=1)
+    zmax = float(pv[months].values.max()) or 1.0        # 顏色以月格為準，合計不搶色階
+    fig = px.imshow(pv.values, x=months + ["合計"], y=top8, color_continuous_scale="Blues",
+                    aspect="auto", text_auto=",.0f", zmax=zmax, labels=dict(color="萬"))
+    fig.update_traces(textfont_size=11)
+    fig.update_layout(height=max(240, 36 * len(top8)), margin=dict(l=8, r=8, t=8, b=8),
+                      coloraxis_showscale=False, font=dict(family="Noto Sans TC, Microsoft JhengHei"))
     st.plotly_chart(fig, use_container_width=True)
 
 # ---- 業務 × 平台 總計 ----
@@ -121,8 +141,10 @@ mat = A.salesperson_platform(f["ym_from"], f["ym_to"], f, exclude_barter=f["excl
 if mat is None or mat.empty:
     st.info("此條件查無資料。")
 else:
-    disp = mat.reset_index().rename(columns={"salesperson": "業務"})
-    cfg = {c: st.column_config.NumberColumn(c, format="localized") for c in mat.columns}
+    mat = mat.loc[:, [c for c in mat.columns if mat[c].abs().sum() > 0]]   # 拿掉整欄為 0 的平台
+    disp = mat.round(0).reset_index().rename(columns={"salesperson": "業務"})
+    cfg = {c: st.column_config.NumberColumn(c, format="localized", width="small") for c in mat.columns}
+    cfg["業務"] = st.column_config.TextColumn("業務", width="medium")
     st.dataframe(disp, column_config=cfg, hide_index=True, use_container_width=True)
     st.caption("數字為除佣實收（對外、已排除內部轉撥"
                + ("、排除交換" if f["exclude_barter"] else "") + "）；欄依總額由大到小排，末欄為該業務合計。")

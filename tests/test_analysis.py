@@ -125,6 +125,53 @@ def test_target_progress_q3_actuals():
     assert abs(got["鉑霖"] - 4_765_370) <= 1
 
 
+# ------------------------------------------------------------------ P0-3：截止月 = 最後已結束的月
+@requires_db
+def test_as_of_is_last_completed_month():
+    r = _fetch("select as_of_ym from v_as_of")[0]
+    m = _fetch("select date_trunc('month', current_date)::date as m")[0]
+    assert r["as_of_ym"] < m["m"], "v_as_of 應為最後一個已結束的月份（本月進行中不算）"
+
+
+# ------------------------------------------------------------------ P0-2：統一毛利率口徑
+@requires_db
+def test_margin_kpis_matches_group_month():
+    """margin_kpis（含成本單）的帳上毛利率 = v_group_month 同區間的 booked_margin。"""
+    from core import analysis as A
+    dw = A.load_deals(YF, YT)
+    mk = A.margin_kpis(dw)
+    r = _fetch("select case when sum(ext_net)<>0 then sum(booked_profit)/sum(ext_net) end bm "
+               "from v_group_month where perf_year=2026 and perf_month<=9")[0]
+    assert abs(mk["booked"] - float(r["bm"])) <= 0.001
+    assert mk["booked_rev_only"] > mk["booked"]      # 只看有收入客戶會較高（含成本單會拉低）
+
+
+# ------------------------------------------------------------------ P0-4：流失風險 KPI 與清單同口徑、無空業務
+@requires_db
+def test_churn_list_same_scope_and_no_null_salesperson():
+    from core import analysis as A
+    dw = A.load_deals(YF, YT)
+    dp = A.load_deals(PF, PT)
+    cust = A.agg_customers(dw, dp, A.customer_year(2026))
+    churn = A.churn_list(dp, cust, 300000)
+    # 清單每一家去年同段金額都 ≥ 門檻、且本期不在客戶清單
+    cur_set = set(cust["customer"])
+    assert (churn["prev_net"] >= 300000).all()
+    assert not churn["customer"].isin(cur_set).any()
+    assert churn["main_salesperson"].notna().all(), "去年業務不應有空值"
+
+
+# ------------------------------------------------------------------ P0-5：客戶產業以訂單眾數補齊，前 20 名無未分類
+@requires_db
+def test_top_customers_have_industry():
+    from core import analysis as A
+    dw = A.load_deals(YF, YT)
+    cust = A.agg_customers(dw, A.load_deals(PF, PT), A.customer_year(2026))
+    top20 = cust.head(20)
+    missing = top20[top20["industry"].isna() | (top20["industry"] == "(未分類)")]
+    assert len(missing) == 0, f"前 20 名仍有未分類：{list(missing['customer'])}"
+
+
 # ------------------------------------------------------------------ 純函式（免 DB）：毛利率分段
 def test_margin_band_boundaries():
     from core.analysis import margin_band

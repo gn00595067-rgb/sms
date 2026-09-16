@@ -17,7 +17,7 @@ from db import transaction  # noqa: E402
 
 from core import analysis as A
 from core.auth import require_role
-from core.format import COLORS, money, pct
+from core.format import COLORS, money, pct, wan
 from core.ui import feedback_widget, page_header
 from core.uimode import page_available
 from reports.render_excel import build_excel
@@ -59,41 +59,47 @@ st.divider()
 # ---- 兩張圖：金額分佈 / 毛利率分佈 ----
 c1, c2 = st.columns(2)
 with c1:
-    st.markdown("**訂單金額分佈**")
+    st.markdown("**訂單金額分佈**（單位：萬）")
     sb = A.size_buckets(d)
     labels = [s[3:] for s in sb["size_bucket"]]
-    fig = go.Figure(go.Bar(y=labels, x=sb["net"], orientation="h", marker_color=COLORS["accent"],
-                           text=[f"{money(n)}｜{int(c)} 筆｜{pct(m)}" for n, c, m in zip(sb["net"], sb["n"], sb["booked_margin"])],
+    fig = go.Figure(go.Bar(y=labels, x=sb["net"] / 10000, orientation="h", marker_color=COLORS["accent"],
+                           cliponaxis=False,
+                           text=[f"{wan(n)}｜{int(c)} 筆｜{pct(m)}" for n, c, m in zip(sb["net"], sb["n"], sb["booked_margin"])],
                            textposition="outside", hovertemplate="%{text}<extra></extra>"))
     fig.update_layout(showlegend=False, height=260, margin=dict(l=8, r=8, t=8, b=8),
                       yaxis=dict(autorange="reversed"), font=dict(family="Noto Sans TC, Microsoft JhengHei"))
+    fig.update_xaxes(range=[0, float(sb["net"].max()) / 10000 * 1.5], ticksuffix="萬", tickformat=",.0f")
     st.plotly_chart(fig, use_container_width=True)
 with c2:
-    st.markdown("**毛利率分佈**")
+    st.markdown("**毛利率分佈**（單位：萬）")
     mb = A.margin_bands(d)
     labels = [s[3:] for s in mb["band"]]
     def _c(b):
         return COLORS["alert"]["red"] if b.startswith("<0") else (COLORS["alert"]["yellow"] if b.startswith("0–16") else COLORS["accent"])
-    fig2 = go.Figure(go.Bar(y=labels, x=mb["net"], orientation="h",
-                            marker_color=[_c(s[3:]) for s in mb["band"]],
-                            text=[f"{money(n)}｜{int(c)} 筆" for n, c in zip(mb["net"], mb["n"])],
+    fig2 = go.Figure(go.Bar(y=labels, x=mb["net"] / 10000, orientation="h",
+                            marker_color=[_c(s[3:]) for s in mb["band"]], cliponaxis=False,
+                            text=[f"{wan(n)}｜{int(c)} 筆" for n, c in zip(mb["net"], mb["n"])],
                             textposition="outside", hovertemplate="%{text}<extra></extra>"))
     fig2.update_layout(showlegend=False, height=260, margin=dict(l=8, r=8, t=8, b=8),
                        yaxis=dict(autorange="reversed"), font=dict(family="Noto Sans TC, Microsoft JhengHei"))
+    fig2.update_xaxes(range=[0, float(mb["net"].max()) / 10000 * 1.5], ticksuffix="萬", tickformat=",.0f")
     st.plotly_chart(fig2, use_container_width=True)
 
-# ---- 產業 × 平台歸類熱圖 ----
-st.markdown("**產業 × 平台歸類**（除佣實收；產業取前 9）")
+# ---- 產業 × 平台歸類熱圖（含數字，單位：萬）----
+st.markdown("**產業 × 平台歸類**（除佣實收；產業取前 9；數字為萬）")
 dd = d.copy()
 dd["ind"] = dd["industry"].fillna("(未分類)")
 dd["pg"] = dd["main_platform_group"].map(lambda p: p if p in ("企頻", "新鮮視", "廣播") else "其他")
 top9 = dd.groupby("ind")["ext_net"].sum().sort_values(ascending=False).head(9).index.tolist()
 pv = dd[dd["ind"].isin(top9)].pivot_table(index="ind", columns="pg", values="ext_net", aggfunc="sum")
-pv = pv.reindex(index=top9, columns=["企頻", "新鮮視", "廣播", "其他"]).fillna(0)
-fig3 = px.imshow(pv.values / 10000, x=list(pv.columns), y=top9, color_continuous_scale="Blues", aspect="auto",
-                 labels=dict(color="萬"))
-fig3.update_layout(height=max(260, 34 * len(top9)), margin=dict(l=8, r=8, t=8, b=8),
-                   font=dict(family="Noto Sans TC, Microsoft JhengHei"))
+pv = (pv.reindex(index=top9, columns=["企頻", "新鮮視", "廣播", "其他"]).fillna(0) / 10000)
+pv["合計"] = pv.sum(axis=1)
+zmax = float(pv[["企頻", "新鮮視", "廣播", "其他"]].values.max()) or 1.0
+fig3 = px.imshow(pv.values, x=list(pv.columns), y=top9, color_continuous_scale="Blues", aspect="auto",
+                 text_auto=",.0f", zmax=zmax, labels=dict(color="萬"))
+fig3.update_traces(textfont_size=11)
+fig3.update_layout(height=max(280, 38 * len(top9)), margin=dict(l=8, r=8, t=8, b=8),
+                   coloraxis_showscale=False, font=dict(family="Noto Sans TC, Microsoft JhengHei"))
 st.plotly_chart(fig3, use_container_width=True)
 
 # ---- 訂單排名 ----
@@ -118,15 +124,22 @@ if can_edit_deal and ev and getattr(ev, "selection", None) and ev.selection.get(
 xcols = ["contract_no", "ad_name", "customer", "industry", "salesperson", "company",
          "platform_groups", "perf_ym_text", "ext_net", "booked_cost", "booked_profit",
          "booked_margin", "net_margin", "production_cost"]
-st.download_button("⬇ 下載 Excel", data=build_excel(d.sort_values(sort_col, ascending=False)[xcols], "銷售分析", A.filter_text(f), columns=xcols),
+st.download_button("⬇ 下載 Excel（單位：元）",
+                   data=build_excel(d.sort_values(sort_col, ascending=False)[xcols], "銷售分析", A.filter_text(f) + "　單位：元", columns=xcols),
                    file_name="analysis_sales.xlsx",
                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-# ---- 低毛利清單（可回填原因） ----
+# ---- 待處理低毛利訂單（可回填原因）----
 st.divider()
-st.markdown("**⚠ 低毛利訂單**（≥10 萬、毛利率最低）— 直接填「低毛利原因」後儲存")
-n_low = st.number_input("顯示筆數", min_value=1, max_value=100, value=10, key="low_n")
-low = d[d["ext_net"] >= 100000].sort_values("booked_margin").head(int(n_low)).copy()
+st.markdown("**⚠ 待處理低毛利訂單**（≥10 萬、毛利率最低）— 直接填「低毛利原因」後儲存")
+cc1, cc2 = st.columns([1, 1])
+n_low = cc1.number_input("顯示筆數", min_value=1, max_value=100, value=10, key="low_n")
+incl_struct = cc2.checkbox("含營運/製作成本單", value=False, key="low_struct")
+low = d[d["ext_net"] >= 100000].copy()
+if not incl_struct:
+    # 排除結構性成本單：營運平台歸類（固定成本），非報價問題（P2-2）
+    low = low[low["main_platform_group"] != "營運"]
+low = low.sort_values("booked_margin").head(int(n_low)).copy()
 if low.empty:
     st.caption("此條件下無低毛利訂單。")
 else:

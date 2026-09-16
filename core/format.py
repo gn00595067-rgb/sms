@@ -161,6 +161,27 @@ def pct(v, *, already_ratio: bool = True) -> str:
     return f"{x:.1f}%"
 
 
+def wan(v, decimals: int = 0) -> str:
+    """金額 → 「萬」單位字串，如 69,420,000 → '6,942萬'。None → ''。"""
+    if _is_missing(v):
+        return ""
+    try:
+        x = float(v) / 10000
+    except (ValueError, TypeError):
+        return str(v)
+    return f"{x:,.{decimals}f}萬"
+
+
+def axis_wan(fig, axis: str = "y"):
+    """把 plotly 圖的金額軸標成『萬』（資料需先除以 10,000 再畫）。"""
+    opts = dict(ticksuffix="萬", tickformat=",.0f")
+    if axis == "y":
+        fig.update_yaxes(**opts)
+    else:
+        fig.update_xaxes(**opts)
+    return fig
+
+
 def ym_text(v) -> str:
     """date / datetime / 'YYYY-MM-DD' → '2026/09'。"""
     if _is_missing(v):

@@ -37,15 +37,35 @@ if not customers:
     st.info("查無客戶資料。")
     st.stop()
 
-focus = st.session_state.get("customer_focus")
-idx = customers.index(focus) if focus in customers else 0
-customer = st.selectbox("客戶", customers, index=idx, key="cd_customer")
-st.session_state["customer_focus"] = customer
-
 ao = A.as_of()
 year = ao["as_of_year"]
 yf, yt = date(year, 1, 1), ao["as_of_ym"]
 pf, pt = A.prev_window(yf, yt)
+
+# 預設：本期金額最大的客戶（P0-6），沒有 focus 時
+focus = st.session_state.get("customer_focus")
+if focus not in customers:
+    biggest = query_df(
+        f"""select customer from v_deal_summary where not is_barter and perf_ym between %s and %s{scope_sql}
+            group by customer order by sum(ext_net) desc nulls last limit 1""",
+        [yf, yt] + scope_params)
+    if not biggest.empty and biggest.iloc[0]["customer"] in customers:
+        focus = biggest.iloc[0]["customer"]
+idx = customers.index(focus) if focus in customers else 0
+customer = st.selectbox("客戶", customers, index=idx, key="cd_customer")
+st.session_state["customer_focus"] = customer
+
+# 交易習慣（P2-4）
+txn = query_df(
+    "select distinct perf_ym from v_deal_summary where customer=%s and not is_barter and ext_net>0 order by perf_ym",
+    (customer,))
+txn_months = txn["perf_ym"].tolist() if not txn.empty else []
+last_txn = txn_months[-1] if txn_months else None
+months_since = ((ao["as_of_year"] - last_txn.year) * 12 + (ao["as_of_month"] - last_txn.month)) if last_txn else None
+avg_gap = None
+if len(txn_months) >= 2:
+    span = (txn_months[-1].year - txn_months[0].year) * 12 + (txn_months[-1].month - txn_months[0].month)
+    avg_gap = span / (len(txn_months) - 1)
 
 # ---- KPI：期間 / 去年同段 / 歷年 ----
 def _sum(ym_from, ym_to):
@@ -71,45 +91,55 @@ A.kpi_row([
      "sub": f"帳上毛利 {money(prev_bp)}"},
     {"label": "歷年累計", "value": money(all_net),
      "sub": f"帳上毛利 {money(all_bp)}（{pct(all_bp/all_net) if all_net else '–'}）"},
+    {"label": "最近一次交易", "value": (ym_text(last_txn) if last_txn else "—"),
+     "sub": (f"距今 {months_since} 個月" if months_since is not None else "")},
+    {"label": "平均回購間隔", "value": (f"{avg_gap:.1f} 個月" if avg_gap is not None else "—"),
+     "sub": f"歷年交易 {len(txn_months)} 個月"},
 ])
 
 st.divider()
 
-# ---- 24 個月 除佣實收 / 帳上毛利（兩張小圖並排，單軸） ----
-start24 = (ao["as_of_ym"] - relativedelta(months=23))
+# ---- 除佣實收 / 帳上毛利（只畫有資料的月份範圍，最少 12 個月）P2-4 ----
+if txn_months:
+    first_data = txn_months[0]
+    start_win = min(first_data, ao["as_of_ym"] - relativedelta(months=11))
+    start_win = max(start_win, ao["as_of_ym"] - relativedelta(months=23))   # 最多 24 個月
+else:
+    start_win = ao["as_of_ym"] - relativedelta(months=11)
 mrows = query_df(
     """select perf_ym, coalesce(sum(ext_net),0) net, coalesce(sum(booked_profit),0) bp
        from v_customer_month where customer=%s and perf_ym between %s and %s
        group by perf_ym order by perf_ym""",
-    (customer, start24, ao["as_of_ym"]))
-months = A.month_range(start24, ao["as_of_ym"])
+    (customer, start_win, ao["as_of_ym"]))
+months = A.month_range(start_win, ao["as_of_ym"])
 mlabels = [ym_text(m) for m in months]
 net_by = {r["perf_ym"]: float(r["net"] or 0) for _, r in mrows.iterrows()} if not mrows.empty else {}
 bp_by = {r["perf_ym"]: float(r["bp"] or 0) for _, r in mrows.iterrows()} if not mrows.empty else {}
 c1, c2 = st.columns(2)
 with c1:
-    st.markdown("**近 24 個月 除佣實收**")
-    fig = go.Figure(go.Bar(x=mlabels, y=[net_by.get(m, 0) for m in months], marker_color=COLORS["accent"]))
-    fig.update_layout(height=260, margin=dict(l=8, r=8, t=8, b=8),
-                      font=dict(family="Noto Sans TC, Microsoft JhengHei"))
+    st.markdown(f"**近 {len(months)} 個月 除佣實收（萬）**")
+    fig = go.Figure(go.Bar(x=mlabels, y=[net_by.get(m, 0) / 10000 for m in months], marker_color=COLORS["accent"]))
+    fig.update_layout(height=260, margin=dict(l=8, r=8, t=8, b=8), font=dict(family="Noto Sans TC, Microsoft JhengHei"))
+    fig.update_yaxes(ticksuffix="萬", tickformat=",.0f")
     st.plotly_chart(fig, use_container_width=True)
 with c2:
-    st.markdown("**近 24 個月 帳上毛利**")
-    fig2 = go.Figure(go.Scatter(x=mlabels, y=[bp_by.get(m, 0) for m in months], mode="lines+markers",
+    st.markdown(f"**近 {len(months)} 個月 帳上毛利（萬）**")
+    fig2 = go.Figure(go.Scatter(x=mlabels, y=[bp_by.get(m, 0) / 10000 for m in months], mode="lines+markers",
                                 line=dict(color=COLORS["company"]["東吳"])))
-    fig2.update_layout(height=260, margin=dict(l=8, r=8, t=8, b=8),
-                       font=dict(family="Noto Sans TC, Microsoft JhengHei"))
+    fig2.update_layout(height=260, margin=dict(l=8, r=8, t=8, b=8), font=dict(family="Noto Sans TC, Microsoft JhengHei"))
+    fig2.update_yaxes(ticksuffix="萬", tickformat=",.0f")
     st.plotly_chart(fig2, use_container_width=True)
 
 # ---- 歷年同期比較 ----
 st.markdown("**歷年同期比較**（今年到目前 vs 各年同一段月份）")
 yrows = query_df(
     """select perf_year, ext_net, ext_net_same_period, booked_profit, booked_margin, yoy_pct, main_salesperson
-       from v_customer_year where customer=%s order by perf_year""",
-    (customer,))
+       from v_customer_year where customer=%s and perf_year <= %s order by perf_year""",
+    (customer, year))          # 拿掉未來年（只有預登）P2-4
 if not yrows.empty:
+    yrows["perf_year"] = yrows["perf_year"].astype(str)   # 年欄用文字，不加千分位 P1-5
     A.show_ranking(yrows, [
-        ("perf_year", "年", "int"),
+        ("perf_year", "年", "text", {"width": "small"}),
         ("ext_net", "全年除佣實收", "money"),
         ("ext_net_same_period", "同段除佣實收", "money"),
         ("yoy_pct", "同期%", "pct"),

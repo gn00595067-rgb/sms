@@ -13,7 +13,7 @@ agg_sp / band / size_bucket）；頁面與測試都從這裡拿數字，確保�
 from __future__ import annotations
 
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -45,15 +45,22 @@ def _df(sql: str, params=None) -> pd.DataFrame:
             return pd.DataFrame(cur.fetchall())
 
 
+def _as_date(v) -> date:
+    """把 date / pandas Timestamp / datetime 一律轉成 datetime.date（避免型別不一致比較失敗）。"""
+    if isinstance(v, date) and not isinstance(v, datetime):
+        return v
+    return pd.Timestamp(v).date()
+
+
 @st.cache_data(ttl=60)
 def as_of() -> dict:
-    """分析用截止月：有資料且不晚於本月的最大業績年月。"""
+    """分析用截止月：最後一個已結束的月份（本月進行中不算，見 sql/006）。"""
     df = _df("select as_of_ym, as_of_year, as_of_month from v_as_of")
     if df.empty or df.iloc[0]["as_of_ym"] is None:
         today = date.today().replace(day=1)
         return {"as_of_ym": today, "as_of_year": today.year, "as_of_month": today.month}
     r = df.iloc[0]
-    return {"as_of_ym": r["as_of_ym"], "as_of_year": int(r["as_of_year"]),
+    return {"as_of_ym": _as_date(r["as_of_ym"]), "as_of_year": int(r["as_of_year"]),
             "as_of_month": int(r["as_of_month"])}
 
 
@@ -70,9 +77,14 @@ def prev_window(ym_from: date, ym_to: date) -> tuple[date, date]:
 
 @st.cache_data(ttl=60)
 def analysis_months() -> list[date]:
-    """有資料的業績年月（新到舊），供期間下拉。"""
-    df = _df("select perf_ym from v_months order by perf_ym desc")
-    return df["perf_ym"].tolist() if not df.empty else []
+    """
+    期間下拉的可選月份（新到舊）：只到本月，排除未來的預登月份（如 2027 的預登），
+    並統一成 datetime.date（避免與 as_of 的型別不一致，導致預設迄月落到 months[0]）。
+    """
+    df = _df(
+        "select perf_ym from v_months where perf_ym <= date_trunc('month', current_date)::date "
+        "order by perf_ym desc")
+    return [_as_date(m) for m in df["perf_ym"].tolist()] if not df.empty else []
 
 
 def sales_scope_name(user: dict | None) -> str | None:
@@ -130,6 +142,109 @@ def load_deals(ym_from: date, ym_to: date, filters: dict | None = None,
     if "is_low_margin" in df.columns:
         df["is_low_margin"] = df["is_low_margin"].fillna(False).astype(bool)
     return df
+
+
+def open_month() -> dict | None:
+    """本月（進行中）概況：perf_ym / deals / ext_net / last_entry。無資料回 None。"""
+    df = _df("select perf_ym, deals, ext_net, last_entry from v_open_month")
+    if df.empty or df.iloc[0]["deals"] in (0, None):
+        return None
+    r = df.iloc[0]
+    return {"perf_ym": r["perf_ym"], "deals": int(r["deals"]),
+            "ext_net": float(r["ext_net"] or 0), "last_entry": r["last_entry"]}
+
+
+def margin_kpis(dw: pd.DataFrame) -> dict:
+    """
+    統一的毛利率口徑（P0-2）：以期間內全部非交換訂單（含零收入成本單）計算。
+    回傳 booked/group/net（三層毛利率）與 booked_rev_only（只看有收入訂單的帳上毛利率）。
+    """
+    if dw is None or dw.empty:
+        return {"ext_net": 0.0, "booked": None, "group": None, "net": None, "booked_rev_only": None}
+    en = float(dw["ext_net"].sum())
+    bp = float(dw["booked_profit"].sum())
+    gp = float(dw["group_profit"].sum())
+    npf = float(dw["net_profit"].sum())
+    d = dw[dw["ext_net"] > 0]
+    en_r = float(d["ext_net"].sum())
+    bp_r = float(d["booked_profit"].sum())
+    return {"ext_net": en,
+            "booked": bp / en if en else None,
+            "group": gp / en if en else None,
+            "net": npf / en if en else None,
+            "booked_rev_only": bp_r / en_r if en_r else None}
+
+
+def churn_list(prev_df: pd.DataFrame, cur_df: pd.DataFrame, threshold: float = 300000):
+    """
+    流失風險（P0-4，KPI 與清單同口徑）：去年同段 ≥ threshold 且本期無收入的客戶。
+    回傳 DataFrame：customer、prev_net、last_txn（去年同段最後交易月）、months_since_last、main_salesperson、industry。
+    """
+    cols = ["customer", "prev_net", "last_txn", "months_since_last", "main_salesperson", "industry"]
+    if prev_df is None or prev_df.empty:
+        return pd.DataFrame(columns=cols)
+    p = prev_df[prev_df["ext_net"] > 0]
+    prev_net = p.groupby("customer")["ext_net"].sum()
+    cur_set = set(cur_df["customer"]) if cur_df is not None and not cur_df.empty else set()
+    cand = prev_net[(prev_net >= threshold) & (~prev_net.index.isin(cur_set))].sort_values(ascending=False)
+    if cand.empty:
+        return pd.DataFrame(columns=cols)
+    ao = as_of()
+    last_txn = p.groupby("customer")["perf_ym"].max()
+    # 去年同段內金額最大的業務
+    sp = (p.groupby(["customer", "salesperson"])["ext_net"].sum()
+          .reset_index().sort_values("ext_net", ascending=False)
+          .drop_duplicates("customer").set_index("customer")["salesperson"])
+    ind = (p.groupby(["customer", "industry"])["ext_net"].sum()
+           .reset_index().sort_values("ext_net", ascending=False)
+           .drop_duplicates("customer").set_index("customer")["industry"])
+    rows = []
+    for c, v in cand.items():
+        lt = last_txn.get(c)
+        msl = None
+        if lt is not None:
+            msl = (ao["as_of_year"] - lt.year) * 12 + (ao["as_of_month"] - lt.month)
+        rows.append({"customer": c, "prev_net": float(v),
+                     "last_txn": lt, "months_since_last": msl,
+                     "main_salesperson": sp.get(c), "industry": ind.get(c)})
+    return pd.DataFrame(rows, columns=cols)
+
+
+@st.cache_data(ttl=60)
+def active_salespeople(user: dict | None = None) -> list[str]:
+    """可下鑽的業務清單（排除停用、單字垃圾名、公司戶），供業務頁預設。"""
+    scope = sales_scope_name(user)
+    if scope == "":
+        return []
+    if scope:
+        return [scope]
+    df = _df(
+        "select distinct s.name from salesperson s join v_deal_summary d on d.salesperson_id = s.id "
+        "where s.is_active and length(btrim(s.name)) > 1 and not d.is_house order by s.name")
+    return df["name"].tolist() if not df.empty else []
+
+
+@st.cache_data(ttl=120)
+def data_quality_summary() -> dict:
+    """資料品質面板（P2-3）：主檔缺產業的活躍客戶、異常業務名、疑似同一客戶異名。"""
+    no_ind = _df(
+        "select c.name from customer c where c.is_active and c.industry_id is null "
+        "and exists (select 1 from deal d where d.customer_id = c.id) order by c.name")
+    bad_sp = _df("select name from salesperson where name is not null and length(btrim(name)) <= 1")
+    # 疑似異名：去掉常見尾綴後相同
+    dup = _df(
+        """with n as (
+             select id, name,
+                    btrim(regexp_replace(name, '(股份有限公司|有限公司|集團|企業社|company|co\\.?,? ?ltd\\.?)', '', 'gi')) as base
+             from customer where is_active
+           )
+           select base, string_agg(name, ' / ' order by name) as names, count(*) c
+           from n where base <> '' group by base having count(*) > 1 order by c desc limit 30""")
+    return {
+        "no_industry_n": len(no_ind), "no_industry": no_ind["name"].tolist() if not no_ind.empty else [],
+        "bad_salesperson": bad_sp["name"].tolist() if not bad_sp.empty else [],
+        "dup_groups": dup.to_dict("records") if not dup.empty else [],
+    }
 
 
 @st.cache_data(ttl=60)
@@ -289,8 +404,18 @@ def agg_customers(df: pd.DataFrame, prev_df: pd.DataFrame | None = None,
     out = g[NUM].sum()
     out["deals"] = g.size()
     out["active_months"] = g["perf_ym"].nunique()
+    out["last_txn"] = g["perf_ym"].max()
     out["main_salesperson"] = g.apply(
         lambda x: x.groupby("salesperson")["ext_net"].sum().idxmax())
+    # 產業：優先用「訂單產業眾數」（deal.industry 幾乎都有），主檔為空才 fallback（P0-5）
+    if "industry" in d.columns:
+        out["industry_orders"] = g["industry"].agg(
+            lambda s: s.mode().iat[0] if s.notna().any() else None)
+
+    # 距上次交易（月，以訂單 max(perf_ym) 為準，不依賴 v_customer_year）
+    ao = as_of()
+    out["months_since_last"] = out["last_txn"].map(
+        lambda d0: None if pd.isna(d0) else (ao["as_of_year"] - d0.year) * 12 + (ao["as_of_month"] - d0.month))
 
     # 同期
     if prev_df is not None and not prev_df.empty:
@@ -300,12 +425,24 @@ def agg_customers(df: pd.DataFrame, prev_df: pd.DataFrame | None = None,
     out["prev_net"] = cp.reindex(out.index)
     out["yoy_pct"] = (out["ext_net"] - out["prev_net"]) / out["prev_net"].abs()
 
-    # 狀態 / 距上次交易 / 產業（來自 v_customer_year）
+    # 狀態 / 產業（狀態來自 v_customer_year；產業以訂單眾數為主、主檔補）
     if cy is not None and not cy.empty:
-        join_cols = [c for c in ("status", "months_since_last", "industry", "customer_category")
-                     if c in cy.columns]
-        out = out.join(cy[join_cols], how="left")
+        join_cols = [c for c in ("status", "customer_category") if c in cy.columns]
+        if "industry" in cy.columns:
+            out = out.join(cy[join_cols + ["industry"]].rename(columns={"industry": "industry_master"}), how="left")
+        else:
+            out = out.join(cy[join_cols], how="left")
     out["status"] = out["status"].fillna("既有") if "status" in out.columns else "既有"
+    # 合併產業：訂單眾數 → 主檔
+    io = out["industry_orders"] if "industry_orders" in out.columns else pd.Series(index=out.index, dtype=object)
+    im = out["industry_master"] if "industry_master" in out.columns else pd.Series(index=out.index, dtype=object)
+    out["industry"] = io.where(io.notna(), im)
+    out = out.drop(columns=[c for c in ("industry_orders", "industry_master") if c in out.columns])
+
+    # 同期文字（新客顯示「新」）
+    from core.format import pct as _pct
+    out["yoy_text"] = out.apply(
+        lambda r: "新" if pd.isna(r["prev_net"]) or r["prev_net"] == 0 else _pct(r["yoy_pct"]), axis=1)
 
     out = out.sort_values("ext_net", ascending=False)
     out["rank_in_year"] = range(1, len(out) + 1)
@@ -385,6 +522,9 @@ def agg_salespeople(df: pd.DataFrame, prev_df: pd.DataFrame | None = None,
         sp = pd.Series(dtype=float)
     out["prev_net"] = sp.reindex(out.index)
     out["yoy_pct"] = (out["ext_net"] - out["prev_net"]) / out["prev_net"].abs()
+    from core.format import pct as _pct
+    out["yoy_text"] = out.apply(
+        lambda r: "新" if pd.isna(r["prev_net"]) or r["prev_net"] == 0 else _pct(r["yoy_pct"]), axis=1)
 
     if new_by_sp is not None:
         out["new_customers"] = new_by_sp.reindex(out.index).fillna(0).astype(int)
@@ -464,70 +604,108 @@ def kpi_row(items: list[dict]) -> None:
                 st.caption(it["sub"])
 
 
+def _nearest_month(target: date, months: list[date]) -> date:
+    """把 target 對到 months（有資料的月）中最接近的一個。"""
+    return min(months, key=lambda m: abs((m - target).days)) if months else target
+
+
 def filter_bar_analysis(key: str, *, user: dict | None = None,
                         show_industry: bool = True, show_salesperson: bool = True,
                         show_house_toggle: bool = False) -> dict:
     """
-    分析頁共用篩選列。回傳 dict：ym_from, ym_to, company, platform_group, industry,
-    salesperson, customer, exclude_barter, include_house。
-    期間預設 今年 1 月 → 截止月。SALES 角色隱藏業務篩選（自動限縮）。
+    分析頁共用篩選列（跨頁保留：所有 widget 用共用 key）。回傳 dict：ym_from, ym_to,
+    company, platform_group, industry, salesperson, customer, exclude_barter,
+    include_house, includes_open（迄月是否含進行中月份）。
+    期間預設 今年 1 月 → 截止月（= 最後已結束的月，P0-3）。SALES 角色隱藏業務篩選。
     """
     from core.format import ym_text
     from core import data as _data
 
     user = user or current_user()
     is_sales = bool(user and user.get("role") == "SALES")
-    months = analysis_months()
+    months = analysis_months()          # 新到舊
+    ao = as_of()
     def_from, def_to = window_defaults()
+    ss = st.session_state
     out: dict = {}
 
+    if not months:
+        out.update(ym_from=def_from, ym_to=def_to, company=None, platform_group=None,
+                   industry=None, salesperson=None, customer="", exclude_barter=True,
+                   include_house=True, includes_open=False)
+        return out
+
+    # 初始化共用狀態（只在第一次）
+    if "af_ymf" not in ss:
+        ss.af_ymf = _nearest_month(def_from, months)
+    if "af_ymt" not in ss:
+        ss.af_ymt = def_to if def_to in months else months[0]
+
+    # 快捷區間鈕（在 selectbox 之前設定 session，selectbox 直接讀）
+    labels = {m: ym_text(m) for m in months}
+    q = st.columns(4)
+    if q[0].button("上月", use_container_width=True, key=f"{key}_q_last"):
+        ss.af_ymf = ss.af_ymt = ao["as_of_ym"]
+    if q[1].button("本季", use_container_width=True, key=f"{key}_q_qtr"):
+        qm = (ao["as_of_month"] - 1) // 3 * 3 + 1
+        ss.af_ymf = _nearest_month(date(ao["as_of_year"], qm, 1), months)
+        ss.af_ymt = ao["as_of_ym"]
+    if q[2].button("今年至今", use_container_width=True, key=f"{key}_q_ytd"):
+        ss.af_ymf = _nearest_month(date(ao["as_of_year"], 1, 1), months)
+        ss.af_ymt = ao["as_of_ym"]
+    if q[3].button("近 12 個月", use_container_width=True, key=f"{key}_q_12"):
+        ss.af_ymf = _nearest_month(ao["as_of_ym"] - relativedelta(months=11), months)
+        ss.af_ymt = ao["as_of_ym"]
+
     c1, c2 = st.columns(2)
-    if months:
-        labels = {m: ym_text(m) for m in months}
-        # 期間起：預設今年 1 月（不在清單就取最接近）
-        from_default = def_from if def_from in months else min(months, key=lambda m: abs((m - def_from).days))
-        to_default = def_to if def_to in months else months[0]
-        out["ym_from"] = c1.selectbox("期間（起）", months, index=months.index(from_default),
-                                      format_func=lambda m: labels[m], key=f"{key}_ymf")
-        out["ym_to"] = c2.selectbox("期間（迄）", months, index=months.index(to_default),
-                                    format_func=lambda m: labels[m], key=f"{key}_ymt")
-    else:
-        out["ym_from"], out["ym_to"] = def_from, def_to
+    out["ym_from"] = c1.selectbox("期間（起）", months, format_func=lambda m: labels[m], key="af_ymf")
+    out["ym_to"] = c2.selectbox("期間（迄）", months, format_func=lambda m: labels[m], key="af_ymt")
 
     row = st.columns(4)
     with row[0]:
         comps = [None] + [o[1] for o in _data.options("company")]
         out["company"] = st.selectbox("公司別", comps,
-                                      format_func=lambda v: "全部" if v is None else v, key=f"{key}_co")
+                                      format_func=lambda v: "全部" if v is None else v, key="af_co")
     with row[1]:
         pgs = [None] + _data.platform_groups()
         out["platform_group"] = st.selectbox("平台歸類", pgs,
-                                              format_func=lambda v: "全部" if v is None else v, key=f"{key}_pg")
+                                              format_func=lambda v: "全部" if v is None else v, key="af_pg")
     with row[2]:
         if show_industry:
             inds = [None] + [o[1] for o in _data.options("industry")]
             out["industry"] = st.selectbox("產業別", inds,
-                                           format_func=lambda v: "全部" if v is None else v, key=f"{key}_ind")
+                                           format_func=lambda v: "全部" if v is None else v, key="af_ind")
         else:
             out["industry"] = None
     with row[3]:
         if show_salesperson and not is_sales:
             sps = [None] + [o[1] for o in _data.options("salesperson")]
             out["salesperson"] = st.selectbox("業務", sps,
-                                              format_func=lambda v: "全部" if v is None else v, key=f"{key}_sp")
+                                              format_func=lambda v: "全部" if v is None else v, key="af_sp")
         else:
             out["salesperson"] = None
 
     row2 = st.columns([2, 1, 1])
     with row2[0]:
-        out["customer"] = st.text_input("客戶（模糊）", key=f"{key}_cust")
+        out["customer"] = st.text_input("客戶（模糊）", key="af_cust")
     with row2[1]:
-        out["exclude_barter"] = st.checkbox("排除交換", value=True, key=f"{key}_barter")
+        out["exclude_barter"] = st.checkbox("排除交換", value=True, key="af_barter")
     with row2[2]:
         if show_house_toggle:
-            out["include_house"] = st.checkbox("含公司戶", value=True, key=f"{key}_house")
+            out["include_house"] = st.checkbox("含公司戶", value=True, key="af_house")
         else:
             out["include_house"] = True
+
+    # 進行中月份提示（P0-3）
+    om = open_month()
+    if om:
+        out["includes_open"] = out["ym_to"] >= om["perf_ym"]
+        from core.format import money as _money, date_text as _dt
+        st.caption(f"ℹ️ {ym_text(om['perf_ym'])} 進行中（已登 {om['deals']} 筆、{_money(om['ext_net'])}；"
+                   f"最後登打 {_dt(om['last_entry'])[5:] if om['last_entry'] else '—'}），未納入預設區間"
+                   + ("　⚠ 目前區間含未結月，同期比較會偏低" if out["includes_open"] else ""))
+    else:
+        out["includes_open"] = False
     return out
 
 
@@ -550,10 +728,10 @@ def show_ranking(df: pd.DataFrame, columns: list, *, height: int | None = 460,
         order.append(header)
         if kind in ("money", "int"):
             disp[header] = pd.to_numeric(df[col], errors="coerce").round(0)
-            cfg[header] = st.column_config.NumberColumn(header, format="localized")
+            cfg[header] = st.column_config.NumberColumn(header, format="localized", width=opts.get("width"))
         elif kind == "pct":
             disp[header] = pd.to_numeric(df[col], errors="coerce")
-            cfg[header] = st.column_config.NumberColumn(header, format="percent")
+            cfg[header] = st.column_config.NumberColumn(header, format="percent", width=opts.get("width"))
         elif kind == "progress":
             v = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
             disp[header] = v
@@ -561,16 +739,17 @@ def show_ranking(df: pd.DataFrame, columns: list, *, height: int | None = 460,
             if not mx or mx <= 0:
                 mx = float(v.max()) if len(v) and float(v.max()) > 0 else 1.0
             cfg[header] = st.column_config.ProgressColumn(
-                header, format="percent", min_value=0.0, max_value=float(mx))
+                header, format=opts.get("format", "percent"), min_value=0.0, max_value=float(mx))
         elif kind == "bar":
             disp[header] = df[col].values
             cfg[header] = st.column_config.BarChartColumn(header, help=opts.get("help"))
         elif kind == "line":
             disp[header] = df[col].values
             cfg[header] = st.column_config.LineChartColumn(header, help=opts.get("help"))
-        else:  # text
-            disp[header] = df[col].astype(object)
-            cfg[header] = st.column_config.TextColumn(header)
+        else:  # text（NaN/None 顯示空白，不印 'None'）
+            s = df[col]
+            disp[header] = s.where(s.notna(), "").astype(object)
+            cfg[header] = st.column_config.TextColumn(header, width=opts.get("width"))
     kwargs = dict(column_config=cfg, hide_index=True, use_container_width=True, key=key)
     if isinstance(height, int) and height > 0:
         kwargs["height"] = height   # None → 讓 Streamlit 自動高度（1.63 不接受 height=None）
