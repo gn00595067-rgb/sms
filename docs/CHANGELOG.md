@@ -35,3 +35,22 @@
 
 ## 階段 G — 文件
 - README、USER_GUIDE、ASSUMPTIONS、HOW_TO_ADD_REPORT、DEPLOY、ACCEPTANCE、CHANGELOG。
+
+## 階段 H — 分析報表（客戶 / 業務 / 銷售 / 公司）
+- **資料層** `sql/005_analysis.sql`：新增 `sales_target`、`forecast` 兩表；12 個 view
+  （`v_line_ext`、`v_as_of`、`v_deal_summary`、`v_customer_month/year`、`v_industry_year`、
+  `v_salesperson_month/year`、`v_company_month`、`v_group_month`、`v_target_progress`、
+  `v_booked_vs_forecast`）。三層毛利（帳上 / 集團 / 淨利）全系統同一套定義；種子含 2026 Q3 目標。
+- **參考實作 / 樣稿** `tools/mockup_generator.py`：四張分析表每個數字的規格；產出 `docs/report_design_mockup.html`。
+  設計文字版見 `docs/REPORT_DESIGN.md`。
+- **共用層** `core/analysis.py`：`load_deals` / `agg_customers` / `agg_salespeople` / `agg_industries` /
+  `size_buckets` / `margin_bands` / `customer_trends` / `filter_bar_analysis` / `kpi_row` / `show_ranking`；
+  彙總邏輯逐一對齊 mockup_generator。`core/format.py` 新增 `COLORS`（公司 / 平台歸類 / 狀態 / 警示）與附錄 C 標籤。
+- **頁面**（app.py 新增「分析」頁群）：客戶分析、業務分析、銷售分析、公司分析，客戶頁、業務頁（下鑽）。
+  圖用 plotly（色一律取自 COLORS），表用 `st.dataframe` + `column_config`
+  （ProgressColumn 佔比 / 達成率、BarChartColumn 平台組合、LineChartColumn 月趨勢），每表可下載 Excel。
+- **主檔維護** P5 新增「目標 / 預估」兩個 tab（寫 sales_target / forecast）。
+- **報表中心** 新增 6 筆整年表 registry：客戶年度、業務年度、產業年度、集團三層毛利月表、目標達成、進單＋預估。
+- **首頁** KPI 改集團口徑（v_group_month / v_company_month）+ 加集團合併卡 + 當季目標達成列。
+- **測試** `tests/test_analysis.py`：對 2026/01–09 視窗核對 §7 驗收數字（集團三層毛利、各公司除佣、
+  客戶 / 業務彙總、銷售分佈、Q3 目標實績、ABC 年度家數 39/61/76）。全套 `pytest -q` = 40 passed、零回歸。

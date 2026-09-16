@@ -51,7 +51,59 @@ LABELS = {
     # 補充（頁面會用到，但不在附錄 C）
     "region_code": "區域代碼", "settled_manually": "手動結清", "category_dc": "直客/廣代",
     "invoice_delivered_on": "發票交付日", "settled_note": "結清備註", "region_codes": "區域",
+    # ---- 附錄 C 補充（CLAUDE_CODE_TASK_2 §3.9 分析報表）----
+    "ext_net": "除佣實收", "ext_gross": "實收金額", "booked_profit": "帳上毛利",
+    "group_profit": "集團毛利", "net_profit": "集團淨利", "ic_add_back": "轉撥加回",
+    "ic_in": "收到轉撥", "ic_out": "轉撥金額", "booked_cost": "實付", "group_cost": "集團成本",
+    "production_cost": "製作費", "alloc_fixed_cost": "分攤固定成本", "company_net_profit": "公司淨利",
+    "booked_margin": "帳上毛利率", "group_margin": "集團毛利率", "net_margin": "集團淨利率",
+    "status": "狀態", "abc_tier": "ABC", "freq_tier": "頻率", "months_since_last": "距上次交易(月)",
+    "yoy_pct": "同期%", "share": "佔比", "cum_share": "累計佔比", "top3_share": "前3大依賴度",
+    "top1_share": "最大客戶依賴度", "new_customers": "新客數", "avg_deal": "平均單筆",
+    "target_amount": "目標", "actual": "進單", "remaining": "待追", "achieved_pct": "達成率",
+    "achieved_pct_with_forecast": "加預估後達成率", "required_monthly": "每月需達",
+    "forecast_amount": "預估", "forecast_weighted": "加權預估", "booked_plus_forecast": "進單＋預估",
+    "barter_net": "交換", "is_house": "公司戶", "size_bucket": "金額級距", "strategy_hint": "策略提示",
+    "net_cp": "企頻", "net_fresh": "新鮮視", "net_radio": "廣播", "net_other": "其他",
+    "deals": "訂單數", "active_months": "活躍月數", "customers": "客戶數", "net_per_customer": "客均產值",
+    "main_salesperson": "主要業務", "main_company": "主要公司", "main_group": "組別",
+    "main_platform_group": "主要平台", "platform_groups": "平台組合", "rank_in_year": "名次",
+    "top_customer": "最大客戶", "period_label": "期間", "months_left": "剩餘月份",
+    "active_salespeople": "業務人數", "perf_ym_text": "業績年月", "low_margin_reason": "低毛利原因",
 }
+
+# ---------------------------------------------------------------------
+# 顏色（CLAUDE_CODE_TASK_2 §1.3）— 所有 plotly 圖一律從這裡拿色，不用 plotly 預設色。
+# 公司藍綠橘沿用老闆儀表板；平台歸類同色系深淺；狀態沿用公司色；紅黃綠只用在警示。
+# ---------------------------------------------------------------------
+COLORS = {
+    # 公司別
+    "company": {"聲活": "#2a78d6", "東吳": "#1baf7a", "鉑霖": "#eb6834", "瑞迪": "#4a3aa7"},
+    # 平台歸類
+    "platform_group": {"企頻": "#4a3aa7", "新鮮視": "#6353bc", "廣播": "#8377cf", "其他": "#a49bdf"},
+    # 客戶狀態
+    "status": {"新客": "#1baf7a", "回流": "#eb6834", "既有": "#2a78d6"},
+    # 警示
+    "alert": {"red": "#d03b3b", "yellow": "#fab219", "green": "#0ca30c"},
+    # 通用強調色（與聲活同藍）
+    "accent": "#2a78d6", "accent2": "#6da7ec", "accent3": "#b7d3f6",
+}
+
+# 平台歸類固定順序（表格與堆疊圖用）
+PLATFORM_GROUP_ORDER = ["企頻", "新鮮視", "廣播", "其他"]
+
+
+def company_color(name: str) -> str:
+    return COLORS["company"].get(name, COLORS["accent"])
+
+
+def platform_group_color(name: str) -> str:
+    return COLORS["platform_group"].get(name, COLORS["platform_group"]["其他"])
+
+
+def status_color(name: str) -> str:
+    return COLORS["status"].get(name, "#8b95a3")
+
 
 # 區域代碼 → 中文（core/deals 與頁面顯示用）
 REGION_LABELS = {"ALL": "全區域", "N": "北區", "C": "中區", "S": "南區"}
@@ -151,13 +203,25 @@ MONEY_COLS = {
     "layer1_profit", "layer2_revenue", "layer2_direct_cost", "fixed_cost", "layer2_profit",
     "amount_total", "allowance_note_amount", "received_amount", "outstanding_amount",
     "threshold_amount", "ad_income", "production_income",
+    # 分析報表
+    "ext_net", "ext_gross", "booked_profit", "group_profit", "net_profit", "ic_add_back",
+    "ic_in", "ic_out", "booked_cost", "group_cost", "production_cost", "alloc_fixed_cost",
+    "company_net_profit", "avg_deal", "target_amount", "actual", "remaining", "amount",
+    "forecast_amount", "forecast_weighted", "booked_plus_forecast", "booked_net", "barter_net",
+    "required_monthly", "net_per_customer", "net_cp", "net_fresh", "net_radio", "net_other",
+    "top3_net", "top1_net", "prev_year_net", "prev_net",
 }
-RATIO_PCT_COLS = {"margin_pct", "share_in_company", "recognition_ratio", "rate"}   # 0.16 → 16.0%
-PERCENT_NUM_COLS = {"rebate_pct", "cash_discount_pct", "bonus_pct"}                # 10 → 10.0%
+RATIO_PCT_COLS = {"margin_pct", "share_in_company", "recognition_ratio", "rate",
+                  "booked_margin", "group_margin", "net_margin", "share", "cum_share",
+                  "top3_share", "top1_share", "yoy_pct", "achieved_pct",
+                  "achieved_pct_with_forecast", "target_pct"}   # 0.16 → 16.0%
+PERCENT_NUM_COLS = {"rebate_pct", "cash_discount_pct", "bonus_pct", "probability"}  # 10 → 10.0%
 INT_COLS = {
     "line_count", "deal_count", "total_frames", "total_seconds", "material_seconds",
     "purchased_slots", "bonus_slots", "blink_slots", "daling_count", "overdue_days",
     "rank_in_company", "line_no", "perf_year", "perf_quarter",
+    "deals", "active_months", "customers", "active_salespeople", "new_customers",
+    "salesperson_count", "months_since_last", "rank_in_year", "months_left",
 }
 YM_COLS = {"perf_ym", "order_ym", "blink_ym"}
 DATE_COLS = {"air_start", "air_end", "invoice_issued_on", "invoice_due_on", "expected_cash_on",

@@ -83,6 +83,16 @@ def _view_filters(view: str) -> dict:
             "perf_year": ("perf_year = %s", None),
             "company": ("company = %s", None),
         },
+        # ---- 分析報表（direct）----
+        "v_customer_year": {"company": ("main_company = %s", None)},
+        "v_salesperson_year": {"company": ("main_company = %s", None)},
+        "v_industry_year": {},
+        "v_group_month": {"ym_range": ("perf_ym between %s and %s", None)},
+        "v_target_progress": {"company": ("company = %s", None)},
+        "v_booked_vs_forecast": {
+            "ym_range": ("perf_ym between %s and %s", None),
+            "company": ("company = %s", None),
+        },
     }
     return f.get(view, {})
 
@@ -163,6 +173,8 @@ def run_report(key: str, filters: dict, *, group_by_label: str | None = None,
     where, params = _build_where(view, filters, user, apply_scope)
     if r.get("only_open"):
         where.append("not is_settled")
+    if r.get("default_where"):  # 常數片段（白名單，不含使用者輸入）
+        where.append(r["default_where"])
     where_sql = (" where " + " and ".join(where)) if where else ""
 
     if r.get("mode") == "aggregate" and group_by_label and r["group_by_options"].get(group_by_label):

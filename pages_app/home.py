@@ -34,6 +34,7 @@ last_month = this_month - relativedelta(months=1)
 
 
 def kpi_by_company(m):
+    """SALES：自己的（v_deal_line_flat 可依業務限縮）。"""
     return query_df(
         f"""select company,
                    sum(gross_amount) as gross, sum(net_amount) as net,
@@ -45,22 +46,71 @@ def kpi_by_company(m):
     )
 
 
+def kpi_group_company(m):
+    """非 SALES：集團口徑（v_company_month，除佣實收=對外、毛利=帳上毛利），與分析頁一致。"""
+    return query_df(
+        """select company, sum(ext_gross) as gross, sum(ext_net) as net,
+                  sum(booked_profit) as gp,
+                  case when sum(ext_net)<>0 then sum(booked_profit)/sum(ext_net) end as margin
+           from v_company_month where perf_ym = %s
+           group by company order by net desc nulls last""",
+        [m],
+    )
+
+
 # ---- KPI 卡（本月，依公司別分欄）----
-st.subheader(f"本月 {ym_text(this_month)} KPI（依公司別）")
-cur = kpi_by_company(this_month)
-prev = kpi_by_company(last_month)
+st.subheader(f"本月 {ym_text(this_month)} KPI（依公司別，集團口徑）")
+is_sales = sp_name is not None or user["role"] == "SALES"
+cur = kpi_by_company(this_month) if is_sales else kpi_group_company(this_month)
+prev = kpi_by_company(last_month) if is_sales else kpi_group_company(last_month)
 if cur is None or cur.empty:
     st.info("本月尚無資料")
 else:
     prev_net = {r["company"]: float(r["net"] or 0) for _, r in prev.iterrows()} if prev is not None and not prev.empty else {}
-    cols = st.columns(min(len(cur), 5) or 1)
-    for col, (_, r) in zip(cols, cur.iterrows()):
-        with col:
+    # 集團合併卡（非 SALES）
+    n_cards = min(len(cur), 4) + (0 if is_sales else 1)
+    cols = st.columns(n_cards or 1)
+    ci = 0
+    if not is_sales:
+        g = query_df(
+            "select sum(ext_net) net, sum(group_profit) gp, sum(net_profit) np, case when sum(ext_net)<>0 then sum(group_profit)/sum(ext_net) end margin from v_group_month where perf_ym=%s",
+            [this_month])
+        gp_prev = query_df("select sum(ext_net) net from v_group_month where perf_ym=%s", [last_month])
+        if g is not None and not g.empty and g.iloc[0]["net"] is not None:
+            with cols[0]:
+                gr = g.iloc[0]
+                d = float(gr["net"] or 0) - (float(gp_prev.iloc[0]["net"]) if gp_prev is not None and not gp_prev.empty and gp_prev.iloc[0]["net"] is not None else 0)
+                st.markdown("**集團合併**")
+                st.metric("除佣實收", money(gr["net"]), delta=f"{money(d)}（vs 上月）")
+                st.caption(f"集團毛利 {money(gr['gp'])}　毛利率 {pct(gr['margin'])}")
+                st.caption(f"集團淨利 {money(gr['np'])}")
+            ci = 1
+    for (_, r) in list(cur.iterrows())[: (n_cards - ci)]:
+        with cols[ci]:
             st.markdown(f"**{r['company']}**")
             delta = float(r["net"] or 0) - prev_net.get(r["company"], 0)
             st.metric("除佣實收", money(r["net"]), delta=f"{money(delta)}（vs 上月）")
             st.caption(f"實收 {money(r['gross'])}")
             st.caption(f"毛利 {money(r['gp'])}　毛利率 {pct(r['margin'])}")
+        ci += 1
+
+# ---- 當季目標達成 ----
+if not is_sales:
+    q = (this_month.month - 1) // 3 + 1
+    tq = query_df(
+        """select company, target_amount, actual, achieved_pct, required_monthly, months_left
+           from v_target_progress where period_type='Q' and year=%s and period_no=%s order by company""",
+        [this_month.year, q])
+    if tq is not None and not tq.empty:
+        st.subheader(f"當季目標達成（{this_month.year} Q{q}）")
+        tcols = st.columns(min(len(tq), 4) or 1)
+        for col, (_, r) in zip(tcols, tq.iterrows()):
+            with col:
+                st.markdown(f"**{r['company']}**")
+                st.metric("達成率", pct(r["achieved_pct"]),
+                          delta=f"進單 {money(r['actual'])} / 目標 {money(r['target_amount'])}")
+                if r["months_left"] and int(r["months_left"]) > 0:
+                    st.caption(f"剩 {int(r['months_left'])} 月・每月需 {money(r['required_monthly'])}")
 
 # ---- 圖 1：近 12 個月除佣實收趨勢（依公司堆疊）----
 st.subheader("近 12 個月除佣實收趨勢")
