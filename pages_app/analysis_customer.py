@@ -66,42 +66,144 @@ st.divider()
 # ---- 兩張圖：ABC 分級 / 產業別（單位：萬）----
 c1, c2 = st.columns(2)
 with c1:
-    st.markdown("**客戶分級（ABC）：多少客戶貢獻 80% 業績**")
+    st.markdown("**客戶分級（ABC）：多少客戶貢獻 80% 業績**　·　點長條看該級公司")
     abc = cust.groupby("abc_tier").agg(n=("customer", "count"), net=("ext_net", "sum")).reindex(["A", "B", "C"]).dropna()
     tier_label = {"A": "A 級（累計 80%）", "B": "B 級（80–95%）", "C": "C 級（最後 5%）"}
     tier_color = {"A": COLORS["accent"], "B": COLORS["accent2"], "C": COLORS["accent3"]}
+    tiers = list(abc.index)
+    sel_tier = st.session_state.get("abc_focus")
     fig = go.Figure()
-    for tier in abc.index:
+    for tier in tiers:
+        dim = sel_tier is not None and tier != sel_tier
         fig.add_bar(y=[tier_label[tier]], x=[float(abc.loc[tier, "net"]) / 10000], orientation="h",
                     marker_color=tier_color[tier], name=tier, cliponaxis=False,
+                    customdata=[tier], opacity=0.35 if dim else 1.0,
                     text=f"{wan(abc.loc[tier, 'net'])}｜{int(abc.loc[tier, 'n'])} 家",
-                    textposition="outside", hovertemplate="%{text}<extra></extra>")
+                    textposition="outside", hovertemplate="%{text}　（點選）<extra></extra>")
     fig.update_layout(showlegend=False, height=220, margin=dict(l=8, r=8, t=8, b=8),
                       yaxis=dict(autorange="reversed"), font=dict(family="Noto Sans TC, Microsoft JhengHei"))
     fig.update_xaxes(range=[0, float(abc["net"].max()) / 10000 * 1.45], ticksuffix="萬", tickformat=",.0f")
-    st.plotly_chart(fig, use_container_width=True)
+    abc_ev = st.plotly_chart(fig, use_container_width=True, key="abc_chart", on_select="rerun")
+    # 解析點選 → 記住被點的級別（customdata 優先，curve_number 後備）
+    if abc_ev and getattr(abc_ev, "selection", None) and abc_ev.selection.get("points"):
+        p = abc_ev.selection["points"][0]
+        cd = p.get("customdata")
+        picked = (cd[0] if isinstance(cd, (list, tuple)) and cd else cd) if cd else None
+        if picked is None and p.get("curve_number") is not None and p["curve_number"] < len(tiers):
+            picked = tiers[p["curve_number"]]
+        if picked and picked != sel_tier:
+            st.session_state["abc_focus"] = picked
+            st.rerun()
+    if sel_tier:
+        if st.button("← 顯示全部（清除分級篩選）", key="abc_clear"):
+            del st.session_state["abc_focus"]
+            st.rerun()
 with c2:
-    st.markdown("**產業別：業績、客戶數、毛利率（前 8 + 其他）**")
+    st.markdown("**產業別：業績、客戶數、毛利率（前 8 + 其他）**　·　點長條看該產業公司")
     ind = A.agg_industries(dw, dp)
     top = ind.head(8)[["industry", "ext_net", "customers", "booked_margin"]].copy()
+    other_label, other_inds = None, []
     if len(ind) > 8:
         others = ind.iloc[8:]
+        other_inds = others["industry"].tolist()
+        other_label = f"其他 {len(others)} 類"
         onet = float(others["ext_net"].sum())
         top = pd.concat([top, pd.DataFrame([{
-            "industry": f"其他 {len(others)} 類", "ext_net": onet,
+            "industry": other_label, "ext_net": onet,
             "customers": int(others["customers"].sum()),
             "booked_margin": float(others["booked_profit"].sum()) / onet if onet else 0,
         }])], ignore_index=True)
+    sel_ind = st.session_state.get("ind_focus")
+    bar_colors = [COLORS["accent"] if (sel_ind is None or lbl == sel_ind) else "#cbd5e1"
+                  for lbl in top["industry"]]
     fig2 = go.Figure()
     fig2.add_bar(y=top["industry"], x=top["ext_net"] / 10000, orientation="h",
-                 marker_color=COLORS["accent"], cliponaxis=False,
+                 marker_color=bar_colors, cliponaxis=False,
+                 customdata=[[lbl] for lbl in top["industry"]],
                  text=[f"{wan(n)}｜{int(c)} 家｜{pct(m)}" for n, c, m in
                        zip(top["ext_net"], top["customers"], top["booked_margin"])],
-                 textposition="outside", hovertemplate="%{y}: %{text}<extra></extra>")
+                 textposition="outside", hovertemplate="%{y}: %{text}　（點選）<extra></extra>")
     fig2.update_layout(showlegend=False, height=max(220, 26 * len(top)), margin=dict(l=8, r=8, t=8, b=8),
                        yaxis=dict(autorange="reversed"), font=dict(family="Noto Sans TC, Microsoft JhengHei"))
     fig2.update_xaxes(range=[0, float(top["ext_net"].max()) / 10000 * 1.5], ticksuffix="萬", tickformat=",.0f")
-    st.plotly_chart(fig2, use_container_width=True)
+    ind_ev = st.plotly_chart(fig2, use_container_width=True, key="ind_chart", on_select="rerun")
+    if ind_ev and getattr(ind_ev, "selection", None) and ind_ev.selection.get("points"):
+        p = ind_ev.selection["points"][0]
+        cd = p.get("customdata")
+        picked = (cd[0] if isinstance(cd, (list, tuple)) and cd else cd) if cd else None
+        if picked is None and p.get("point_index") is not None and p["point_index"] < len(top):
+            picked = top["industry"].iloc[p["point_index"]]
+        if picked and picked != sel_ind:
+            st.session_state["ind_focus"] = picked
+            st.rerun()
+    if sel_ind:
+        if st.button("← 顯示全部（清除產業篩選）", key="ind_clear"):
+            del st.session_state["ind_focus"]
+            st.rerun()
+
+# ---- 點選 ABC 長條 → 動態列出該級公司 ----
+if sel_tier and sel_tier in tier_label:
+    sub = cust[cust["abc_tier"] == sel_tier].copy()
+    st.markdown(
+        f"**{tier_label[sel_tier]}：{len(sub)} 家・合計 {wan(sub['ext_net'].sum())}"
+        f"（佔全體 {pct(sub['ext_net'].sum() / total) if total else '–'}）**　·　點一列 → 客戶頁")
+    tier_cols = [
+        ("rank_in_year", "#", "int", {"width": "small"}),
+        ("customer", "客戶", "text"),
+        ("industry", "產業", "text", {"width": "small"}),
+        ("main_salesperson", "主要業務", "text", {"width": "small"}),
+        ("status", "狀態", "text", {"width": "small"}),
+        ("ext_net", "除佣實收", "money"),
+        ("yoy_text", "同期%", "text", {"width": "small"}),
+        ("share", "佔比", "progress", {"max": float(cust["share"].max())}),
+        ("cum_share", "累計佔比", "pct", {"width": "small"}),
+        ("booked_margin", "毛利率", "pct", {"width": "small"}),
+        ("net_margin", "淨利率", "pct", {"width": "small"}),
+        ("deals", "筆數", "int", {"width": "small"}),
+    ]
+    tev = A.show_ranking(sub, tier_cols, key="abc_tier_rank", on_select="rerun",
+                         height=min(460, 40 + 36 * len(sub)))
+    if tev and getattr(tev, "selection", None) and tev.selection.get("rows"):
+        st.session_state["customer_focus"] = sub.iloc[tev.selection["rows"][0]]["customer"]
+        st.switch_page("pages_app/customer_detail.py")
+
+# ---- 點選產業長條 → 動態列出該產業公司（客戶名單由 dw 反查，與圖上「N 家」同口徑）----
+sel_ind = st.session_state.get("ind_focus")
+if sel_ind:
+    dwc = dw[dw["ext_net"] > 0].copy()
+    dwc["industry"] = dwc["industry"].fillna("(未分類)")
+    if sel_ind == other_label:
+        names = dwc[dwc["industry"].isin(other_inds)]["customer"].unique()
+        title_ind = f"其他 {len(other_inds)} 類產業"
+    else:
+        names = dwc[dwc["industry"] == sel_ind]["customer"].unique()
+        title_ind = sel_ind
+    subi = cust[cust["customer"].isin(names)].copy()
+    if subi.empty:
+        st.info(f"「{title_ind}」查無公司。")
+    else:
+        st.markdown(
+            f"**產業「{title_ind}」：{len(subi)} 家・合計 {wan(subi['ext_net'].sum())}"
+            f"（佔全體 {pct(subi['ext_net'].sum() / total) if total else '–'}）**　·　點一列 → 客戶頁")
+        ind_cols = [
+            ("rank_in_year", "#", "int", {"width": "small"}),
+            ("customer", "客戶", "text"),
+            ("industry", "產業", "text", {"width": "small"}),
+            ("main_salesperson", "主要業務", "text", {"width": "small"}),
+            ("status", "狀態", "text", {"width": "small"}),
+            ("ext_net", "除佣實收", "money"),
+            ("yoy_text", "同期%", "text", {"width": "small"}),
+            ("abc_tier", "分級", "text", {"width": "small"}),
+            ("share", "佔比", "progress", {"max": float(cust["share"].max())}),
+            ("booked_margin", "毛利率", "pct", {"width": "small"}),
+            ("net_margin", "淨利率", "pct", {"width": "small"}),
+            ("deals", "筆數", "int", {"width": "small"}),
+        ]
+        iev = A.show_ranking(subi, ind_cols, key="ind_tier_rank", on_select="rerun",
+                             height=min(460, 40 + 36 * len(subi)))
+        if iev and getattr(iev, "selection", None) and iev.selection.get("rows"):
+            st.session_state["customer_focus"] = subi.iloc[iev.selection["rows"][0]]["customer"]
+            st.switch_page("pages_app/customer_detail.py")
 
 # ---- 客戶價值矩陣（散佈圖，x 平方根刻度；可切毛利率口徑 P2-1）----
 st.markdown("**客戶價值矩陣：金額 × 毛利率 × 頻率 × 狀態**")
