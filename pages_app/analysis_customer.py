@@ -194,13 +194,19 @@ if sel_ind:
         cmap = cust.set_index("customer")
         for col in ("status", "main_salesperson", "abc_tier"):
             g[col] = g["customer"].map(cmap[col])
-        g["main_industry"] = g["customer"].map(cmap["industry"])
+        g["main_industry"] = g["customer"].map(cmap["industry"]).fillna("(未分類)")
+        # 標記跨產業：主力產業不屬於目前篩選的產業（其他類則看是否落在該群產業內）
+        inset = set(other_inds) if sel_ind == other_label else {sel_ind}
+        cross = ~g["main_industry"].isin(inset)
+        n_cross = int(cross.sum())
+        g["main_industry"] = ["〔跨〕" + mi if x else mi for mi, x in zip(g["main_industry"], cross)]
         g = g.sort_values("ext_net", ascending=False).reset_index(drop=True)
         g["rank_in_year"] = range(1, len(g) + 1)
+        cross_note = f"　·　其中 {n_cross} 家為跨產業客戶（主力產業標「〔跨〕」，金額只算該產業那部分）" if n_cross else ""
         st.markdown(
             f"**產業「{title_ind}」：{len(g)} 家・該產業合計 {wan(itot)}"
             f"（佔全體 {pct(itot / total) if total else '–'}）**　·　"
-            "金額/毛利/筆數只算該產業訂單，同一客戶可跨產業　·　點一列 → 客戶頁")
+            "金額/毛利/筆數只算該產業訂單　·　點一列 → 客戶頁" + cross_note)
         ind_cols = [
             ("rank_in_year", "#", "int", {"width": "small"}),
             ("customer", "客戶", "text"),
