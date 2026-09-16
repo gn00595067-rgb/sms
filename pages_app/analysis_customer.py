@@ -167,42 +167,57 @@ if sel_tier and sel_tier in tier_label:
         st.session_state["customer_focus"] = sub.iloc[tev.selection["rows"][0]]["customer"]
         st.switch_page("pages_app/customer_detail.py")
 
-# ---- 點選產業長條 → 動態列出該產業公司（客戶名單由 dw 反查，與圖上「N 家」同口徑）----
+# ---- 點選產業長條 → 動態列出該產業公司 ----
+# 產業記在「每筆訂單」上，同一客戶可跨多個產業。這裡的金額/毛利/筆數只算「該產業的訂單」，
+# 合計 = 長條的數字（與 agg_industries 同口徑）；「主力產業」欄另標客戶主檔產業供參考。
 sel_ind = st.session_state.get("ind_focus")
 if sel_ind:
     dwc = dw[dw["ext_net"] > 0].copy()
     dwc["industry"] = dwc["industry"].fillna("(未分類)")
     if sel_ind == other_label:
-        names = dwc[dwc["industry"].isin(other_inds)]["customer"].unique()
+        dsel = dwc[dwc["industry"].isin(other_inds)]
         title_ind = f"其他 {len(other_inds)} 類產業"
     else:
-        names = dwc[dwc["industry"] == sel_ind]["customer"].unique()
+        dsel = dwc[dwc["industry"] == sel_ind]
         title_ind = sel_ind
-    subi = cust[cust["customer"].isin(names)].copy()
-    if subi.empty:
-        st.info(f"「{title_ind}」查無公司。")
+    if dsel.empty:
+        st.info(f"「{title_ind}」查無訂單。")
     else:
+        g = dsel.groupby("customer").agg(
+            ext_net=("ext_net", "sum"), booked_profit=("booked_profit", "sum"),
+            net_profit=("net_profit", "sum"), deals=("deal_id", "count")).reset_index()
+        nz = g["ext_net"].where(g["ext_net"] != 0)
+        g["booked_margin"] = g["booked_profit"] / nz
+        g["net_margin"] = g["net_profit"] / nz
+        itot = float(g["ext_net"].sum())
+        g["share"] = g["ext_net"] / itot if itot else 0.0
+        cmap = cust.set_index("customer")
+        for col in ("status", "main_salesperson", "abc_tier"):
+            g[col] = g["customer"].map(cmap[col])
+        g["main_industry"] = g["customer"].map(cmap["industry"])
+        g = g.sort_values("ext_net", ascending=False).reset_index(drop=True)
+        g["rank_in_year"] = range(1, len(g) + 1)
         st.markdown(
-            f"**產業「{title_ind}」：{len(subi)} 家・合計 {wan(subi['ext_net'].sum())}"
-            f"（佔全體 {pct(subi['ext_net'].sum() / total) if total else '–'}）**　·　點一列 → 客戶頁")
+            f"**產業「{title_ind}」：{len(g)} 家・該產業合計 {wan(itot)}"
+            f"（佔全體 {pct(itot / total) if total else '–'}）**　·　"
+            "金額/毛利/筆數只算該產業訂單，同一客戶可跨產業　·　點一列 → 客戶頁")
         ind_cols = [
             ("rank_in_year", "#", "int", {"width": "small"}),
             ("customer", "客戶", "text"),
-            ("industry", "產業", "text", {"width": "small"}),
+            ("main_industry", "主力產業", "text", {"width": "small"}),
             ("main_salesperson", "主要業務", "text", {"width": "small"}),
             ("status", "狀態", "text", {"width": "small"}),
-            ("ext_net", "除佣實收", "money"),
-            ("yoy_text", "同期%", "text", {"width": "small"}),
             ("abc_tier", "分級", "text", {"width": "small"}),
-            ("share", "佔比", "progress", {"max": float(cust["share"].max())}),
+            ("ext_net", "該產業除佣實收", "money"),
+            ("share", "佔該產業%", "progress", {"max": float(g["share"].max())}),
             ("booked_margin", "毛利率", "pct", {"width": "small"}),
             ("net_margin", "淨利率", "pct", {"width": "small"}),
             ("deals", "筆數", "int", {"width": "small"}),
         ]
-        iev = A.show_ranking(subi, ind_cols, key="ind_tier_rank", on_select="rerun",
-                             height=min(460, 40 + 36 * len(subi)))
+        iev = A.show_ranking(g, ind_cols, key="ind_tier_rank", on_select="rerun",
+                             height=min(460, 40 + 36 * len(g)))
         if iev and getattr(iev, "selection", None) and iev.selection.get("rows"):
-            st.session_state["customer_focus"] = subi.iloc[iev.selection["rows"][0]]["customer"]
+            st.session_state["customer_focus"] = g.iloc[iev.selection["rows"][0]]["customer"]
             st.switch_page("pages_app/customer_detail.py")
 
 # ---- 客戶價值矩陣（散佈圖，x 平方根刻度；可切毛利率口徑 P2-1）----
