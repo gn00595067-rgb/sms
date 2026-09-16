@@ -10,6 +10,7 @@ import streamlit as st
 
 from core.auth import current_user, is_logged_in, login, logout
 from core.format import ROLE_LABELS
+from core.uimode import ANALYSIS_ONLY
 
 st.set_page_config(page_title="業績系統", page_icon="📊", layout="wide")
 
@@ -68,13 +69,16 @@ def _build_pages(role: str, must_change: bool) -> list:
         # 只能看修改密碼頁
         f, title, icon, _ = PAGES["account"]
         return [st.Page(f, title=title, icon=icon, default=True)]
+    # 本階段測試：只顯示「分析」頁群（見 core/uimode.py）
+    groups = {"分析": GROUPS["分析"]} if ANALYSIS_ONLY else GROUPS
+    default_key = "analysis_customer" if ANALYSIS_ONLY else "home"
     grouped = {}
-    for group, keys in GROUPS.items():
+    for group, keys in groups.items():
         pages = []
         for k in keys:
             f, title, icon, roles = PAGES[k]
             if role in roles:
-                pages.append(st.Page(f, title=title, icon=icon, default=(k == "home")))
+                pages.append(st.Page(f, title=title, icon=icon, default=(k == default_key)))
         if pages:
             grouped[group] = pages
     return grouped

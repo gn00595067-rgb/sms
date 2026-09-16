@@ -149,12 +149,16 @@ if not fc.empty:
 else:
     st.caption("尚無預估資料（主檔維護 → 預估）。")
 
-# ---- 連結 ----
-st.divider()
-c1, c2 = st.columns(2)
-with c1:
-    st.page_link("pages_app/reports.py", label="→ 月業績認定表（報表中心）", icon="📈")
-with c2:
-    st.page_link("pages_app/bonus.py", label="→ 業務獎金試算", icon="🎯")
+# ---- 連結（目標頁被隱藏時不顯示，避免連到不存在的頁）----
+from core.uimode import page_available
+if page_available("reports") or page_available("bonus"):
+    st.divider()
+    c1, c2 = st.columns(2)
+    if page_available("reports"):
+        with c1:
+            st.page_link("pages_app/reports.py", label="→ 月業績認定表（報表中心）", icon="📈")
+    if page_available("bonus"):
+        with c2:
+            st.page_link("pages_app/bonus.py", label="→ 業務獎金試算", icon="🎯")
 
 feedback_widget("salesperson_detail")

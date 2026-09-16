@@ -19,10 +19,12 @@ from core import analysis as A
 from core.auth import require_role
 from core.format import COLORS, money, pct
 from core.ui import feedback_widget, page_header
+from core.uimode import page_available
 from reports.render_excel import build_excel
 
 user = require_role("MEDIA", "FINANCE", "EXEC", "SALES")
-can_edit_deal = user["role"] in ("MEDIA", "EXEC")
+# 只有在「業績登打」頁可達時才開放點列 → 修改（本階段測試隱藏登打頁）
+can_edit_deal = user["role"] in ("MEDIA", "EXEC") and page_available("deal_entry")
 page_header("🧾 銷售分析", "分佈比平均重要：錢集中在哪個級距、有多少業績在低毛利下做的。")
 
 f = A.filter_bar_analysis("asales", user=user, show_house_toggle=True)
