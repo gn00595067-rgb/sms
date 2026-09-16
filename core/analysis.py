@@ -102,6 +102,7 @@ def sales_scope_name(user: dict | None) -> str | None:
 
 
 # ------------------------------------------------------------------ 載入訂單層
+@st.cache_data(ttl=60)
 def load_deals(ym_from: date, ym_to: date, filters: dict | None = None,
                exclude_barter: bool = True, user: dict | None = None) -> pd.DataFrame:
     """v_deal_summary 期間切片（一列 = 一個合約）。參數化 where。"""
@@ -278,6 +279,7 @@ def month_range(ym_from: date, ym_to: date) -> list[date]:
     return out
 
 
+@st.cache_data(ttl=60)
 def customer_trends(customers, ym_from: date, ym_to: date) -> tuple[dict, list]:
     """回傳 (dict[customer]->[各月除佣實收], 月清單)。給排名表的月趨勢 sparkline。"""
     months = month_range(ym_from, ym_to)
