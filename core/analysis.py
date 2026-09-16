@@ -141,6 +141,20 @@ def customer_year(year: int) -> pd.DataFrame:
     return df.set_index("customer")
 
 
+def platform_mix_text(net_cp, net_fresh, net_radio, net_other, top: int = 3) -> str:
+    """平台組合 → 可讀文字，如「企頻 63%｜新鮮視 37%」（只列非零、由大到小）。"""
+    items = [("企頻", net_cp), ("新鮮視", net_fresh), ("廣播", net_radio), ("其他", net_other)]
+    items = [(n, float(v or 0)) for n, v in items if float(v or 0) > 0]
+    total = sum(v for _, v in items)
+    if total <= 0:
+        return ""
+    items.sort(key=lambda x: -x[1])
+    parts = [f"{n} {round(v / total * 100)}%" for n, v in items[:top]]
+    if len(items) > top:
+        parts.append("…")
+    return "｜".join(parts)
+
+
 def month_range(ym_from: date, ym_to: date) -> list[date]:
     out, m = [], ym_from
     while m <= ym_to:

@@ -52,7 +52,7 @@ st.divider()
 # ---- 排名表 ----
 st.markdown("**業務排名**（點一列 → 業務頁）")
 mxnet = float(nonh["ext_net"].max()) if n else 1.0
-nonh["mix"] = nonh.apply(lambda r: [float(r["net_cp"]), float(r["net_fresh"]), float(r["net_radio"]), float(r["net_other"])], axis=1)
+nonh["mix"] = nonh.apply(lambda r: A.platform_mix_text(r["net_cp"], r["net_fresh"], r["net_radio"], r["net_other"]), axis=1)
 event = A.show_ranking(nonh, [
     ("rank_in_year", "#", "int"),
     ("salesperson", "業務", "text"),
@@ -71,7 +71,7 @@ event = A.show_ranking(nonh, [
     ("avg_deal", "平均單筆", "money"),
     ("top3_share", "前3大依賴度", "pct"),
     ("top_customer", "最大客戶", "text"),
-    ("mix", "平台組合", "bar", {"help": "企頻/新鮮視/廣播/其他"}),
+    ("mix", "平台組合", "text"),
     ("barter_net", "交換", "money"),
 ], key="sp_rank", on_select="rerun")
 

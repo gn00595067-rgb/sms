@@ -139,7 +139,7 @@ for name in main_cos:
     en = float(r["en"] or 0); spn = int(r["sp"] or 0)
     rows.append({"company": name, "net_cp": float(r["cp"] or 0), "net_fresh": float(r["fr"] or 0),
                  "net_radio": float(r["rd"] or 0), "net_other": float(r["ot"] or 0), "total": en,
-                 "mix": [float(r["cp"] or 0), float(r["fr"] or 0), float(r["rd"] or 0), float(r["ot"] or 0)],
+                 "mix": A.platform_mix_text(r["cp"], r["fr"], r["rd"], r["ot"]),
                  "booked_margin": float(r["bp"] or 0) / en if en else 0,
                  "sp": spn, "per_sp": en / spn if spn else 0})
 pgdf = pd.DataFrame(rows)
@@ -147,7 +147,7 @@ if not pgdf.empty:
     A.show_ranking(pgdf, [
         ("company", "公司", "text"), ("net_cp", "企頻", "money"), ("net_fresh", "新鮮視", "money"),
         ("net_radio", "廣播", "money"), ("net_other", "其他", "money"), ("total", "合計", "money"),
-        ("mix", "組合", "bar", {"help": "企頻/新鮮視/廣播/其他"}),
+        ("mix", "組合", "text"),
         ("booked_margin", "帳上毛利率", "pct"), ("sp", "業務人數", "int"), ("per_sp", "人均產值", "money"),
     ], height=None, key="co_pg")
 

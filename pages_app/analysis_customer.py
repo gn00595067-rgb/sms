@@ -137,7 +137,7 @@ st.plotly_chart(fig3, use_container_width=True)
 st.markdown("**客戶排名**（點一列 → 客戶頁；下載 Excel 為完整名單）")
 trends, _months = A.customer_trends(cust.head(50)["customer"].tolist(), f["ym_from"], f["ym_to"])
 tbl = cust.head(50).copy()
-tbl["mix"] = tbl.apply(lambda r: [float(r["net_cp"]), float(r["net_fresh"]), float(r["net_radio"]), float(r["net_other"])], axis=1)
+tbl["mix"] = tbl.apply(lambda r: A.platform_mix_text(r["net_cp"], r["net_fresh"], r["net_radio"], r["net_other"]), axis=1)
 tbl["trend"] = tbl["customer"].map(lambda c: trends.get(c, []))
 tbl["industry"] = tbl.get("industry", "").fillna("未分類") if "industry" in tbl.columns else "未分類"
 
@@ -157,7 +157,7 @@ event = A.show_ranking(tbl, [
     ("deals", "筆數", "int"),
     ("active_months", "活躍月數", "int"),
     ("avg_deal", "平均單筆", "money"),
-    ("mix", "平台組合", "bar", {"help": "企頻/新鮮視/廣播/其他"}),
+    ("mix", "平台組合", "text"),
     ("trend", "月趨勢", "line"),
     ("strategy_hint", "策略提示", "text"),
 ], key="cust_rank", on_select="rerun")
