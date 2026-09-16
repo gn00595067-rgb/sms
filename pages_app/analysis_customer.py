@@ -260,7 +260,7 @@ st.plotly_chart(fig3, use_container_width=True)
 
 # ---- 客戶排名表（精簡欄，可展開全部）----
 st.markdown("**客戶排名**（點一列 → 客戶頁；下載 Excel 為完整名單）")
-show_all = st.toggle("顯示全部欄位", value=False, key="cust_allcols")
+show_all = st.toggle("顯示全部欄位", value=True, key="cust_allcols")
 trends, _months = A.customer_trends(cust.head(50)["customer"].tolist(), f["ym_from"], f["ym_to"])
 tbl = cust.head(50).copy()
 tbl["mix"] = tbl.apply(lambda r: A.platform_mix_text(r["net_cp"], r["net_fresh"], r["net_radio"], r["net_other"]), axis=1)
