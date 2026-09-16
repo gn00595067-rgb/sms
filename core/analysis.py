@@ -183,6 +183,52 @@ def customer_trends(customers, ym_from: date, ym_to: date) -> tuple[dict, list]:
     return res, months
 
 
+def salesperson_platform(ym_from: date, ym_to: date, filters: dict | None = None,
+                         exclude_barter: bool = True, user: dict | None = None,
+                         by: str = "platform") -> pd.DataFrame:
+    """
+    業務 × 平台 的除佣實收總計（line 層，排除內部轉撥）。
+    by='platform' → 個別平台（家樂福企頻/健康視…）；by='platform_group' → 平台歸類（企頻/新鮮視…）。
+    回傳 pivot：index=業務、欄=各平台、末欄「合計」、末列「（全部業務合計）」。尊重期間 / 公司 / 產業 / 客戶 / SALES 範圍。
+    """
+    if by not in ("platform", "platform_group"):
+        raise ValueError(by)
+    filters = filters or {}
+    where = ["not is_intercompany", "perf_ym between %s and %s"]
+    params: list = [ym_from, ym_to]
+    if exclude_barter:
+        # 與其他分析一致：排除「整張」交換合約（deal 層 bool_or），非只排交換線
+        where.append("contract_no not in (select contract_no from v_line_ext where is_barter)")
+    if filters.get("company"):
+        where.append("company = %s"); params.append(filters["company"])
+    if filters.get("platform_group"):
+        where.append("platform_group = %s"); params.append(filters["platform_group"])
+    if filters.get("industry"):
+        where.append("industry = %s"); params.append(filters["industry"])
+    if filters.get("customer"):
+        where.append("customer ilike %s"); params.append(f"%{filters['customer']}%")
+    scope = sales_scope_name(user)
+    if scope is not None:
+        if scope == "":
+            where.append("false")
+        else:
+            where.append("salesperson_base = %s"); params.append(scope)
+    df = _df(
+        f"select salesperson_base as salesperson, {by} as col, sum(net_amount) as net "
+        f"from v_line_ext where {' and '.join(where)} and salesperson_base <> '' "
+        f"group by 1, 2", params)
+    if df.empty:
+        return df
+    df["net"] = df["net"].astype(float)
+    piv = df.pivot_table(index="salesperson", columns="col", values="net", aggfunc="sum").fillna(0.0)
+    # 欄依總額由大到小排；加「合計」欄與總計列
+    piv = piv[piv.sum(axis=0).sort_values(ascending=False).index]
+    piv["合計"] = piv.sum(axis=1)
+    piv = piv.sort_values("合計", ascending=False)
+    piv.loc["（全部業務合計）"] = piv.sum(numeric_only=True)
+    return piv
+
+
 def query_reasons(deal_ids: list) -> dict:
     """回傳 {deal_id: 低毛利原因}（取該合約任一非空原因）。"""
     if not deal_ids:

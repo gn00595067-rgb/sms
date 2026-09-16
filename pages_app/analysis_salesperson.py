@@ -111,4 +111,20 @@ if top8:
                       font=dict(family="Noto Sans TC, Microsoft JhengHei"))
     st.plotly_chart(fig, use_container_width=True)
 
+# ---- 業務 × 平台 總計 ----
+st.divider()
+st.markdown("**業務 × 平台 總計**（每個業務在各媒體平台賣出的除佣實收）")
+gran = st.radio("平台細度", ["個別平台（家樂福企頻/健康視…）", "平台歸類（企頻/新鮮視/廣播…）"],
+                horizontal=True, key="sp_plat_gran")
+by = "platform" if gran.startswith("個別") else "platform_group"
+mat = A.salesperson_platform(f["ym_from"], f["ym_to"], f, exclude_barter=f["exclude_barter"], user=user, by=by)
+if mat is None or mat.empty:
+    st.info("此條件查無資料。")
+else:
+    disp = mat.reset_index().rename(columns={"salesperson": "業務"})
+    cfg = {c: st.column_config.NumberColumn(c, format="localized") for c in mat.columns}
+    st.dataframe(disp, column_config=cfg, hide_index=True, use_container_width=True)
+    st.caption("數字為除佣實收（對外、已排除內部轉撥"
+               + ("、排除交換" if f["exclude_barter"] else "") + "）；欄依總額由大到小排，末欄為該業務合計。")
+
 feedback_widget("analysis_salesperson")
