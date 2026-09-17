@@ -21,6 +21,17 @@ if not choices:
     feedback_widget("reports")
     st.stop()
 
+# 同仁分享 / 我的自訂報表（§5.6）：選了跳到「自訂報表」頁並載入定義
+from reports import builder as _B
+_saved = [rr for rr in _B.list_saved(user) if rr["is_shared"] or rr["owner_id"] == user["id"]]
+if _saved:
+    with st.expander(f"📐 自訂報表（{len(_saved)} 個：我的 / 同仁分享）"):
+        for rr in _saved:
+            if st.button(("🔗 " if rr["is_shared"] else "⭐ ") + rr["name"], key=f"open_saved_{rr['id']}"):
+                st.session_state["rb"] = _B.load_definition(rr["definition"])
+                st.session_state["rb"]["_id"] = int(rr["id"])
+                st.switch_page("pages_app/report_builder.py")
+
 key = st.selectbox("報表", [c[0] for c in choices], format_func=lambda k: dict(choices)[k])
 r = report(key)
 if r.get("note"):

@@ -21,7 +21,47 @@ user = require_role("MEDIA", "FINANCE", "EXEC", "SALES")
 is_exec = user["role"] == "EXEC"
 page_header("👥 客戶分析", "誰在養公司、依賴多高、哪個產業在長、誰快掉了。")
 
-f = A.filter_bar_analysis("acust", user=user)
+f = A.filter_bar_analysis("acust", user=user, show_scope=True)
+scope = f["scope"]
+
+# 發稿口徑 / 自訂口徑：改用線層彙總的聚焦排名（避免與分析口徑互動圖表混口徑）
+if scope["preset"] != "analysis":
+    yf, yt = f["ym_from"], f["ym_to"]
+    pf, pt = A.prev_window(yf, yt)
+    lines = A.load_lines(yf, yt, scope, f, user)
+    cl = A.agg_customers_lines(lines, A.load_lines(pf, pt, scope, f, user))
+    st.caption(f"口徑：{('發稿口徑（老闆版）' if scope['preset']=='media' else '自訂')}｜線層彙總（交換併回原業務）。"
+               "完整分析（ABC/產業/流失/矩陣）請切回「分析口徑」。")
+    if cl.empty:
+        st.info("此條件查無資料。"); feedback_widget("analysis_customer"); st.stop()
+    tot = float(cl["ext_net"].sum())
+    A.kpi_row([
+        {"label": "活躍客戶數", "value": f"{len(cl)}"},
+        {"label": "除佣實收合計", "value": money(tot)},
+        {"label": "前 10 大佔比", "value": pct(float(cl.head(10)['ext_net'].sum())/tot if tot else None)},
+        {"label": "帳上毛利率", "value": pct(float(cl['booked_profit'].sum())/tot if tot else None)},
+    ])
+    _co = f.get("company")
+    st.markdown(f"**【{_co}】客戶排名（發稿口徑）**" if _co else "**客戶排名（發稿口徑）**")
+    A.show_ranking(cl.head(200), [
+        ("rank_in_year", "#", "int", {"width": "small"}), ("customer", "客戶", "text"),
+        ("companies_multi", "公司(多)", "text", {"width": "small"}), ("salespeople_multi", "業務(多)", "text"),
+        ("ext_net", "除佣實收", "money"),
+        ("share", "佔比", "progress", {"max": float(cl["share"].max()) if len(cl) else 1.0}),
+        ("net_cp_family", "全家企頻", "money"), ("net_cp_carrefour", "萬家福", "money"),
+        ("net_fresh", "新鮮視", "money"), ("net_radio", "廣播", "money"),
+        ("booked_profit", "帳上毛利", "money"), ("booked_margin", "毛利率", "pct"),
+        ("group_margin", "集團利率", "pct"), ("deals", "筆數", "int", {"width": "small"}),
+        ("yoy_text", "同期%", "text", {"width": "small"}),
+    ], key="cust_rank_scope")
+    xcols = ["rank_in_year", "customer", "companies_multi", "salespeople_multi", "ext_net", "share",
+             "net_cp_family", "net_cp_carrefour", "net_fresh", "net_radio", "booked_profit", "booked_margin"]
+    st.download_button("⬇ 下載 Excel（發稿口徑，單位：元）",
+                       data=build_excel(cl[xcols], "客戶分析（發稿口徑）", A.filter_text(f) + "　單位：元", columns=xcols),
+                       file_name="analysis_customer_media.xlsx",
+                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    feedback_widget("analysis_customer"); st.stop()
+
 dw = A.load_deals(f["ym_from"], f["ym_to"], f, exclude_barter=f["exclude_barter"], user=user)
 if dw.empty:
     st.info("此條件查無資料。")

@@ -291,6 +291,90 @@ def line_group_profit(lines: pd.DataFrame) -> pd.Series:
     return (lines["net_amount"] * lines["deal_id"].map(margin)).fillna(0.0).astype(float)
 
 
+def _plat_cols(lines: pd.DataFrame, index_col: str) -> pd.DataFrame:
+    """把線層 df 依 index_col × report_platform 樞紐出四平台欄（全家企頻/萬家福/新鮮視/廣播）。"""
+    piv = lines.pivot_table(index=index_col, columns="report_platform", values="net_amount",
+                            aggfunc="sum", fill_value=0.0)
+    ren = {"全家企頻": "net_cp_family", "萬家福": "net_cp_carrefour", "新鮮視": "net_fresh", "廣播": "net_radio"}
+    for k, v in ren.items():
+        piv[v] = piv[k] if k in piv.columns else 0.0
+    return piv[list(ren.values())]
+
+
+def agg_customers_lines(lines: pd.DataFrame, prev_lines: pd.DataFrame | None = None) -> pd.DataFrame:
+    """
+    發稿口徑/自訂口徑用的客戶排名（線層彙總）。欄位：ext_net/cost/booked_profit/group_profit 與毛利率、
+    deals、客戶跨公司/業務、四平台、佔比、排名、同期%。不含 status/ABC/strategy（那是分析口徑概念）。
+    """
+    if lines is None or lines.empty:
+        return pd.DataFrame()
+    d = lines.copy()
+    d["_gp"] = line_group_profit(d)
+    g = d.groupby("customer")
+    out = pd.DataFrame(index=g.size().index)
+    out["ext_net"] = g["net_amount"].sum()
+    out["cost"] = g["cost_amount"].sum()
+    out["booked_profit"] = out["ext_net"] - out["cost"]
+    out["group_profit"] = g["_gp"].sum()
+    out["deals"] = g["deal_id"].nunique()
+    out["main_salesperson"] = g.apply(lambda x: x.groupby("salesperson_merged")["net_amount"].sum().idxmax())
+    out["companies_multi"] = g.apply(lambda x: "、".join(x.groupby("company")["net_amount"].sum().sort_values(ascending=False).index))
+    out["salespeople_multi"] = g.apply(lambda x: "、".join(x.groupby("salesperson_merged")["net_amount"].sum().sort_values(ascending=False).index[:5]))
+    out = out.join(_plat_cols(d, "customer"))
+    out = out[out["ext_net"] != 0].sort_values("ext_net", ascending=False)
+    total = out["ext_net"].sum()
+    out["share"] = out["ext_net"] / total if total else 0.0
+    out["cum_share"] = out["share"].cumsum()
+    out["booked_margin"] = out["booked_profit"] / out["ext_net"].where(out["ext_net"] != 0)
+    out["group_margin"] = out["group_profit"] / out["ext_net"].where(out["ext_net"] != 0)
+    out["rank_in_year"] = range(1, len(out) + 1)
+    if prev_lines is not None and not prev_lines.empty:
+        pv = prev_lines.groupby("customer")["net_amount"].sum()
+        out["prev_net"] = pv.reindex(out.index)
+        out["yoy_pct"] = (out["ext_net"] - out["prev_net"]) / out["prev_net"].abs()
+        from core.format import pct as _pct
+        out["yoy_text"] = out.apply(lambda r: "新" if pd.isna(r["prev_net"]) or r["prev_net"] == 0 else _pct(r["yoy_pct"]), axis=1)
+    else:
+        out["yoy_text"] = ""
+    return out.reset_index()
+
+
+def agg_salespeople_lines(lines: pd.DataFrame, prev_lines: pd.DataFrame | None = None) -> pd.DataFrame:
+    """發稿口徑/自訂口徑用的業務排名（線層）。公司戶（is_house）另排、列最後。"""
+    if lines is None or lines.empty:
+        return pd.DataFrame()
+    d = lines.copy()
+    d["_gp"] = line_group_profit(d)
+    g = d.groupby("salesperson_merged")
+    out = pd.DataFrame(index=g.size().index)
+    out["ext_net"] = g["net_amount"].sum()
+    out["cost"] = g["cost_amount"].sum()
+    out["booked_profit"] = out["ext_net"] - out["cost"]
+    out["group_profit"] = g["_gp"].sum()
+    out["deals"] = g["deal_id"].nunique()
+    out["customers"] = g["customer_id"].nunique()
+    out["main_company"] = g.apply(lambda x: x.groupby("company")["net_amount"].sum().idxmax())
+    out["is_house"] = g.apply(lambda x: bool(x["is_house"].any()))
+    out = out.join(_plat_cols(d, "salesperson_merged"))
+    out = out[out["ext_net"] != 0]
+    out["booked_margin"] = out["booked_profit"] / out["ext_net"].where(out["ext_net"] != 0)
+    out["group_margin"] = out["group_profit"] / out["ext_net"].where(out["ext_net"] != 0)
+    out = out.reset_index().rename(columns={"salesperson_merged": "salesperson"})
+    out = out.sort_values(["is_house", "ext_net"], ascending=[True, False]).reset_index(drop=True)
+    out["rank_in_year"] = out.groupby("is_house").cumcount() + 1
+    tot = out["ext_net"].sum()
+    out["share"] = out["ext_net"] / tot if tot else 0.0
+    if prev_lines is not None and not prev_lines.empty:
+        pv = prev_lines.groupby("salesperson_merged")["net_amount"].sum()
+        out["prev_net"] = out["salesperson"].map(pv)
+        out["yoy_pct"] = (out["ext_net"] - out["prev_net"]) / out["prev_net"].abs()
+        from core.format import pct as _pct
+        out["yoy_text"] = out.apply(lambda r: "新" if pd.isna(r["prev_net"]) or r["prev_net"] == 0 else _pct(r["yoy_pct"]), axis=1)
+    else:
+        out["yoy_text"] = ""
+    return out
+
+
 def open_month() -> dict | None:
     """本月（進行中）概況：perf_ym / deals / ext_net / last_entry。無資料回 None。"""
     df = _df("select perf_ym, deals, ext_net, last_entry from v_open_month")

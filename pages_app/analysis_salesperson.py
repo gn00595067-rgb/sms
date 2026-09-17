@@ -16,7 +16,44 @@ from reports.render_excel import build_excel
 user = require_role("MEDIA", "FINANCE", "EXEC", "SALES")
 page_header("🧑‍💼 業務分析", "量與質並列：金額、佔比是量，毛利率、新客、依賴度是質。")
 
-f = A.filter_bar_analysis("asp", user=user, show_salesperson=False)
+f = A.filter_bar_analysis("asp", user=user, show_salesperson=False, show_scope=True)
+scope = f["scope"]
+
+# 發稿口徑 / 自訂口徑：改用線層彙總的聚焦排名（避免與分析口徑圖表混口徑）
+if scope["preset"] != "analysis":
+    yf, yt = f["ym_from"], f["ym_to"]
+    pf, pt = A.prev_window(yf, yt)
+    lines = A.load_lines(yf, yt, scope, f, user)
+    spl = A.agg_salespeople_lines(lines, A.load_lines(pf, pt, scope, f, user))
+    st.caption(f"口徑：{('發稿口徑（老闆版）' if scope['preset']=='media' else '自訂')}｜線層彙總（交換併回原業務）。"
+               "完整分析（狀態/同期圖/熱圖）請切回「分析口徑」。")
+    if spl.empty:
+        st.info("此條件查無資料。"); feedback_widget("analysis_salesperson"); st.stop()
+    nonh = spl[~spl["is_house"]]
+    tot = float(nonh["ext_net"].sum())
+    A.kpi_row([
+        {"label": "有業績的業務", "value": f"{len(nonh)} 人"},
+        {"label": "除佣實收合計", "value": money(tot)},
+        {"label": "帳上毛利率", "value": pct(float(nonh['booked_profit'].sum())/tot if tot else None)},
+    ])
+    A.show_ranking(nonh, [
+        ("rank_in_year", "#", "int", {"width": "small"}), ("salesperson", "業務", "text"),
+        ("main_company", "公司", "text", {"width": "small"}), ("ext_net", "除佣實收", "money"),
+        ("share", "佔比", "progress", {"max": float(nonh["share"].max()) if len(nonh) else 1.0}),
+        ("net_cp_family", "全家企頻", "money"), ("net_cp_carrefour", "萬家福", "money"),
+        ("net_fresh", "新鮮視", "money"), ("net_radio", "廣播", "money"),
+        ("booked_profit", "帳上毛利", "money"), ("booked_margin", "毛利率", "pct"),
+        ("group_margin", "集團利率", "pct"), ("customers", "客戶數", "int", {"width": "small"}),
+        ("yoy_text", "同期%", "text", {"width": "small"}),
+    ], key="sp_rank_scope")
+    house = spl[spl["is_house"]]
+    if not house.empty:
+        st.caption("公司戶（另列、不排名）")
+        A.show_ranking(house, [("salesperson", "業務", "text"), ("main_company", "公司", "text"),
+                               ("ext_net", "除佣實收", "money"), ("booked_profit", "帳上毛利", "money")],
+                       height=None, key="sp_house_scope")
+    feedback_widget("analysis_salesperson"); st.stop()
+
 dw = A.load_deals(f["ym_from"], f["ym_to"], f, exclude_barter=f["exclude_barter"], user=user)
 if dw.empty:
     st.info("此條件查無資料。")

@@ -240,6 +240,22 @@ def test_scope_bridge_reconciles():
 
 
 @requires_db
+def test_agg_lines_reconcile_to_boss():
+    """線層客戶/業務彙總（發稿口徑）加總 = 134,303,021。"""
+    from core import analysis as A
+    lines = A.load_lines(date(2025, 1, 1), date(2025, 12, 1), scope="media")
+    cl = A.agg_customers_lines(lines)
+    assert abs(float(cl["ext_net"].sum()) - 134_303_021) <= 1
+    assert cl["customer"].nunique() >= 260   # 依客戶名彙總、去零收入（vs 265 distinct id）
+    spl = A.agg_salespeople_lines(lines)   # 含公司戶
+    assert abs(float(spl["ext_net"].sum()) - 134_303_021) <= 1
+    # 四平台欄加總 = 全平台（2025 無健康視）
+    fam = float(cl["net_cp_family"].sum()) + float(cl["net_cp_carrefour"].sum()) \
+        + float(cl["net_fresh"].sum()) + float(cl["net_radio"].sum())
+    assert abs(fam - 134_303_021) <= 1
+
+
+@requires_db
 def test_load_lines_merge_ruidi():
     """自訂口徑 merge_ruidi=True 時，瑞迪併入東吳。"""
     from core import analysis as A
