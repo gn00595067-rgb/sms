@@ -10,7 +10,7 @@ ANALYSIS_ONLY = True 時，側欄只顯示「分析」頁群（客戶 / 業務 /
 """
 from __future__ import annotations
 
-ANALYSIS_ONLY = True
+ANALYSIS_ONLY = False
 
 # 分析頁群（含兩個下鑽頁，下鑽靠 st.switch_page，必須保持註冊）
 ANALYSIS_KEYS = {
