@@ -66,9 +66,12 @@ def as_of() -> dict:
 
 
 def window_defaults() -> tuple[date, date]:
-    """(今年 1 月, 截止月)。"""
+    """所有分析頁的預設期間 = (今年 1 月, 截止月)。
+    「今年」綁日曆當年（date.today）；只有當年尚無任何資料時才退回截止月所在年，避免預設落到空區間。"""
     ao = as_of()
-    return date(ao["as_of_year"], 1, 1), ao["as_of_ym"]
+    this_year = date.today().year
+    start_year = this_year if ao["as_of_ym"] >= date(this_year, 1, 1) else ao["as_of_year"]
+    return date(start_year, 1, 1), ao["as_of_ym"]
 
 
 def prev_window(ym_from: date, ym_to: date) -> tuple[date, date]:
