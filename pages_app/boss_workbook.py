@@ -73,6 +73,14 @@ st.caption(f"媒體上稿線 {n_media:,} 筆（不含製作費 {n_prod:,} 筆）
            + ("　⚠ 2024 全部登在瑞迪，公司別無意義，只看三公司合計" if ym_from.year <= 2024 and ym_to.year <= 2024 else ""))
 
 
+# 工作表順序：說明與假設放最後（其餘＝工作簿順序）。匯出 Excel / PDF 同此順序。
+_CSS = f"<style>{H.CSS}</style>"        # H.CSS 是純 CSS，st.html 要自己包 <style>，否則會漏出文字
+SHEET_ORDER = ["平台總計總覽", "客戶數統計與客戶排名", "聲活_年度發稿明細", "東吳_年度發稿明細",
+               "鉑霖_年度發稿明細", "原始資料_發稿分析", "說明與假設"]
+PDF_ORDER = [s for s in SHEET_ORDER if s != "原始資料_發稿分析"]   # 逐筆原始資料太長不進整本 PDF
+st.markdown(_CSS, unsafe_allow_html=True)   # 全站注入一次工作簿樣式；各分頁的表格片段吃這份 CSS
+
+
 # ---- 匯出（整本）----
 def _fname(ext: str) -> str:
     return f"常用分析_{year_label}.{ext}".replace("/", "-")
@@ -80,7 +88,8 @@ def _fname(ext: str) -> str:
 
 e1, e2, e3, _ = st.columns([1.2, 1, 1.4, 3])
 with e1:
-    st.download_button("📊 下載 Excel（整本）", data=BX.build_bytes(raw, year_label=year_label, notes_lines=notes_lines),
+    st.download_button("📊 下載 Excel（整本）",
+                       data=BX.build_bytes(raw, year_label=year_label, notes_lines=notes_lines, sheets=SHEET_ORDER),
                        file_name=_fname("xlsx"),
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                        use_container_width=True, key="bw_xlsx")
@@ -91,7 +100,7 @@ with e2:
         _pdf_ok = lambda: False  # noqa: E731
     if st.button("📄 PDF（整本）", use_container_width=True, key="bw_pdf_btn", disabled=not _pdf_ok()):
         with st.spinner("排版中（約 5–15 秒）…"):
-            html = H.page_html(L.SHEETS[:-1], raw, year_label=year_label, notes_lines=notes_lines,
+            html = H.page_html(PDF_ORDER, raw, year_label=year_label, notes_lines=notes_lines,
                                title=f"常用分析 {year_label}")
             pdf = html_to_pdf(html, orientation="landscape", title=f"常用分析 {year_label}")
         st.session_state["bw_pdf"] = pdf
@@ -100,7 +109,7 @@ with e2:
                            mime="application/pdf", use_container_width=True, key="bw_pdf_dl")
 with e3:
     st.download_button("🖨 列印版 HTML（整本）",
-                       data=H.page_html(L.SHEETS[:-1], raw, year_label=year_label, notes_lines=notes_lines,
+                       data=H.page_html(PDF_ORDER, raw, year_label=year_label, notes_lines=notes_lines,
                                         title=f"常用分析 {year_label}").encode("utf-8"),
                        file_name=_fname("html"), mime="text/html", use_container_width=True, key="bw_html")
 
@@ -129,31 +138,31 @@ def _print_one(name: str):
                                           mime="text/html", key=f"{key}_html")
 
 
-# ---- 七個分頁（順序＝工作簿工作表順序）----
-tabs = st.tabs(["說明與假設", "平台總計總覽", "客戶數統計與客戶排名",
-                "聲活_年度發稿明細", "東吳_年度發稿明細", "鉑霖_年度發稿明細", "原始資料"])
+# ---- 七個分頁（說明與假設放最後；CSS 已由上方 st.markdown 全站注入，這裡只放表格片段）----
+tabs = st.tabs(["平台總計總覽", "客戶數統計與客戶排名", "聲活_年度發稿明細",
+                "東吳_年度發稿明細", "鉑霖_年度發稿明細", "原始資料", "說明與假設"])
 
 with tabs[0]:
-    st.html(H.CSS + H.sheet_html("說明與假設", praw, plats, year_label=year_label, notes_lines=notes_lines))
-    _print_one("說明與假設")
-with tabs[1]:
-    st.html(H.CSS + H.sheet_html("平台總計總覽", praw, plats, year_label=year_label, notes_lines=notes_lines))
+    st.html(H.sheet_html("平台總計總覽", praw, plats, year_label=year_label, notes_lines=notes_lines))
     _print_one("平台總計總覽")
-with tabs[2]:
-    st.html(H.CSS + H.sheet_html("客戶數統計與客戶排名", praw, plats, year_label=year_label, notes_lines=notes_lines))
+with tabs[1]:
+    st.html(H.sheet_html("客戶數統計與客戶排名", praw, plats, year_label=year_label, notes_lines=notes_lines))
     _print_one("客戶數統計與客戶排名")
 for _i, _co in enumerate(("聲活", "東吳", "鉑霖")):
     name = f"{_co}_年度發稿明細"
-    with tabs[3 + _i]:
-        st.html(H.CSS + H.sheet_html(name, praw, plats, year_label=year_label, notes_lines=notes_lines, sections=(1, 2)))
+    with tabs[2 + _i]:
+        st.html(H.sheet_html(name, praw, plats, year_label=year_label, notes_lines=notes_lines, sections=(1, 2)))
         n_lines = int((raw["公司別"] == _co).sum())
         with st.expander(f"逐筆明細（{n_lines} 筆）"):
-            st.html(H.CSS + H.sheet_html(name, praw, plats, year_label=year_label, notes_lines=notes_lines, sections=(3,)))
+            st.html(H.sheet_html(name, praw, plats, year_label=year_label, notes_lines=notes_lines, sections=(3,)))
         _print_one(name)
-with tabs[6]:
+with tabs[5]:
     cols = [c for c in L.RAW_COLS if c in raw.columns]
     st.dataframe(raw[cols], hide_index=True, use_container_width=True, height=560)
     st.download_button("⬇ 下載 CSV（原始資料）", data=raw[cols].to_csv(index=False).encode("utf-8-sig"),
                        file_name=_fname("csv"), mime="text/csv", key="bw_csv")
+with tabs[6]:
+    st.html(H.sheet_html("說明與假設", praw, plats, year_label=year_label, notes_lines=notes_lines))
+    _print_one("說明與假設")
 
 feedback_widget("boss_workbook")
