@@ -9,9 +9,10 @@ import streamlit as st
 
 from core import analysis as A
 from core.auth import require_role
+from core.docs.analysis_salesperson import build_doc
 from core.format import money, pct
 from core.ui import feedback_widget, page_header
-from reports.render_excel import build_excel
+from reports import export as X
 
 user = require_role("MEDIA", "FINANCE", "EXEC", "SALES")
 page_header("🧑‍💼 業務分析", "量與質並列：金額、佔比是量，毛利率、新客、依賴度是質。")
@@ -52,6 +53,8 @@ if scope["preset"] != "analysis":
         A.show_ranking(house, [("salesperson", "業務", "text"), ("main_company", "公司", "text"),
                                ("ext_net", "除佣實收", "money"), ("booked_profit", "帳上毛利", "money")],
                        height=None, key="sp_house_scope")
+    st.divider()
+    X.ui.export_bar(build_doc(f, user), key="asp")
     feedback_widget("analysis_salesperson"); st.stop()
 
 dw = A.load_deals(f["ym_from"], f["ym_to"], f, exclude_barter=f["exclude_barter"], user=user)
@@ -140,14 +143,6 @@ if not house.empty:
         ("booked_margin", "毛利率", "pct"), ("deals", "訂單數", "int"),
     ], height=None, key="sp_house")
 
-xcols = ["rank_in_year", "salesperson", "main_company", "main_group", "ext_net", "yoy_pct",
-         "share", "booked_profit", "booked_margin", "net_margin", "recognized_amount",
-         "customers", "new_customers", "deals", "avg_deal", "top3_share", "barter_net"]
-st.download_button("⬇ 下載 Excel（單位：元）",
-                   data=build_excel(nonh[xcols], "業務分析", A.filter_text(f) + "　單位：元", columns=xcols),
-                   file_name="analysis_salesperson.xlsx",
-                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
 # ---- 業務 × 月 熱圖（含數字與合計，單位：萬）----
 st.divider()
 st.markdown("**業務 × 月 熱圖**（前 8 名，顏色深 = 金額大；數字為萬）")
@@ -188,4 +183,6 @@ else:
     st.caption("數字為除佣實收（對外、已排除內部轉撥"
                + ("、排除交換" if f["exclude_barter"] else "") + "）；欄依總額由大到小排，末欄為該業務合計。")
 
+st.divider()
+X.ui.export_bar(build_doc(f, user), key="asp")
 feedback_widget("analysis_salesperson")

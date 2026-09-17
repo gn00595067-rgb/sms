@@ -13,8 +13,10 @@ from dateutil.relativedelta import relativedelta
 from core import analysis as A
 from core.auth import require_role
 from core.data import query_df
+from core.docs.customer_detail import build_doc
 from core.format import COLORS, money, pct, ym_text
 from core.ui import feedback_widget, page_header, show_df
+from reports import export as X
 
 user = require_role("MEDIA", "FINANCE", "EXEC", "SALES")
 page_header("🏢 客戶頁", "單一客戶的長期趨勢與訂單明細。")
@@ -191,4 +193,6 @@ with c4:
                            font=dict(family="Noto Sans TC, Microsoft JhengHei"))
         st.plotly_chart(figs, use_container_width=True)
 
+st.divider()
+X.ui.export_bar(build_doc(user=user, customer=customer), key="cd")
 feedback_widget("customer_detail")

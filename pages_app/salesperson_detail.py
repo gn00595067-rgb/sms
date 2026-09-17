@@ -9,8 +9,10 @@ import streamlit as st
 from core import analysis as A
 from core.auth import require_role
 from core.data import query_df
+from core.docs.salesperson_detail import build_doc
 from core.format import COLORS, money, pct, ym_text
 from core.ui import feedback_widget, page_header, show_df
+from reports import export as X
 
 user = require_role("MEDIA", "FINANCE", "EXEC", "SALES")
 page_header("🧑‍💼 業務頁", "單一業務的趨勢、客戶組合、目標與預估。")
@@ -171,4 +173,6 @@ if page_available("reports") or page_available("bonus"):
         with c2:
             st.page_link("pages_app/bonus.py", label="→ 業務獎金試算", icon="🎯")
 
+st.divider()
+X.ui.export_bar(build_doc(user=user, salesperson=sp), key="spd")
 feedback_widget("salesperson_detail")

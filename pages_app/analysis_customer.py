@@ -13,9 +13,10 @@ import streamlit as st
 
 from core import analysis as A
 from core.auth import require_role
+from core.docs.analysis_customer import build_doc
 from core.format import COLORS, axis_wan, money, pct, status_color, wan
 from core.ui import feedback_widget, page_header
-from reports.render_excel import build_excel
+from reports import export as X
 
 user = require_role("MEDIA", "FINANCE", "EXEC", "SALES")
 is_exec = user["role"] == "EXEC"
@@ -54,12 +55,8 @@ if scope["preset"] != "analysis":
         ("group_margin", "集團利率", "pct"), ("deals", "筆數", "int", {"width": "small"}),
         ("yoy_text", "同期%", "text", {"width": "small"}),
     ], key="cust_rank_scope")
-    xcols = ["rank_in_year", "customer", "companies_multi", "salespeople_multi", "ext_net", "share",
-             "net_cp_family", "net_cp_carrefour", "net_fresh", "net_radio", "booked_profit", "booked_margin"]
-    st.download_button("⬇ 下載 Excel（發稿口徑，單位：元）",
-                       data=build_excel(cl[xcols], "客戶分析（發稿口徑）", A.filter_text(f) + "　單位：元", columns=xcols),
-                       file_name="analysis_customer_media.xlsx",
-                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    st.divider()
+    X.ui.export_bar(build_doc(f, user), key="acust")
     feedback_widget("analysis_customer"); st.stop()
 
 dw = A.load_deals(f["ym_from"], f["ym_to"], f, exclude_barter=f["exclude_barter"], user=user)
@@ -360,14 +357,6 @@ if event and getattr(event, "selection", None) and event.selection.get("rows"):
     st.session_state["customer_focus"] = tbl.iloc[idx]["customer"]
     st.switch_page("pages_app/customer_detail.py")
 
-xcols = ["rank_in_year", "customer", "industry", "main_salesperson", "status", "ext_net",
-         "yoy_pct", "share", "cum_share", "booked_profit", "booked_margin", "net_margin",
-         "deals", "months_since_last", "avg_deal", "strategy_hint"]
-st.download_button("⬇ 下載 Excel（完整名單，單位：元）",
-                   data=build_excel(cust[xcols], "客戶分析", A.filter_text(f) + "　單位：元", columns=xcols),
-                   file_name="analysis_customer.xlsx",
-                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
 # ---- 流失風險清單（與 KPI 同口徑）----
 st.divider()
 st.markdown("**⚠ 流失風險**：去年同段有業績、今年期間內無業績")
@@ -404,4 +393,6 @@ if is_exec:
         if page_available("masters"):
             st.page_link("pages_app/masters.py", label="→ 去主檔維護補產業", icon="🗂️")
 
+st.divider()
+X.ui.export_bar(build_doc(f, user), key="acust")
 feedback_widget("analysis_customer")

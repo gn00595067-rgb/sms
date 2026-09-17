@@ -35,8 +35,9 @@ def test_docs_do_not_import_streamlit():
         assert "streamlit" not in _imported_top_modules(p), f"{p.name} 不得 import streamlit"
 
 
-# 各 build_doc 模組（隨 J-3/J-5 逐步補齊）
-BUILD_DOC_MODULES = ["core.docs.analysis_company"]
+# pack 用的 build_doc(f, user) 模組（詳細頁 customer_detail/salesperson_detail 需 kwargs，另測）
+BUILD_DOC_MODULES = ["core.docs.analysis_company", "core.docs.analysis_customer",
+                     "core.docs.analysis_salesperson", "core.docs.analysis_sales"]
 
 
 @requires_db

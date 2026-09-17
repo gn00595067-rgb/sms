@@ -17,10 +17,11 @@ from db import transaction  # noqa: E402
 
 from core import analysis as A
 from core.auth import require_role
+from core.docs.analysis_sales import build_doc
 from core.format import COLORS, money, pct, wan
 from core.ui import feedback_widget, page_header
 from core.uimode import page_available
-from reports.render_excel import build_excel
+from reports import export as X
 
 user = require_role("MEDIA", "FINANCE", "EXEC", "SALES")
 # 只有在「業績登打」頁可達時才開放點列 → 修改（本階段測試隱藏登打頁）
@@ -121,14 +122,6 @@ if can_edit_deal and ev and getattr(ev, "selection", None) and ev.selection.get(
     st.session_state["edit_contract"] = top.iloc[ev.selection["rows"][0]]["contract_no"]
     st.switch_page("pages_app/deal_entry.py")
 
-xcols = ["contract_no", "ad_name", "customer", "industry", "salesperson", "company",
-         "platform_groups", "perf_ym_text", "ext_net", "booked_cost", "booked_profit",
-         "booked_margin", "net_margin", "production_cost"]
-st.download_button("⬇ 下載 Excel（單位：元）",
-                   data=build_excel(d.sort_values(sort_col, ascending=False)[xcols], "銷售分析", A.filter_text(f) + "　單位：元", columns=xcols),
-                   file_name="analysis_sales.xlsx",
-                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
 # ---- 待處理低毛利訂單（可回填原因）----
 st.divider()
 st.markdown("**⚠ 待處理低毛利訂單**（≥10 萬、毛利率最低）— 直接填「低毛利原因」後儲存")
@@ -175,4 +168,6 @@ else:
                     n_saved += 1
         st.success(f"已儲存 {n_saved} 筆低毛利原因。")
 
+st.divider()
+X.ui.export_bar(build_doc(f, user, sort_opt=sort_opt), key="asales")
 feedback_widget("analysis_sales")
