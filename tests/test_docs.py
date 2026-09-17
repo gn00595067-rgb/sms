@@ -36,8 +36,22 @@ def test_docs_do_not_import_streamlit():
 
 
 # pack 用的 build_doc(f, user) 模組（詳細頁 customer_detail/salesperson_detail 需 kwargs，另測）
-BUILD_DOC_MODULES = ["core.docs.analysis_company", "core.docs.analysis_customer",
+BUILD_DOC_MODULES = ["core.docs.home", "core.docs.analysis_company", "core.docs.analysis_customer",
                      "core.docs.analysis_salesperson", "core.docs.analysis_sales"]
+
+
+@requires_db
+def test_build_pack_headless():
+    """月報包（core.pack）在無 streamlit 下可組出 zip（PDF/HTML + 每頁 Excel）。"""
+    import io
+    import zipfile
+    from datetime import date
+    from core.pack import build_pack, pack_filter
+    data = build_pack(pack_filter(date(2025, 1, 1), date(2025, 12, 1)),
+                      {"username": "tester", "display_name": "tester", "role": "EXEC"})
+    names = zipfile.ZipFile(io.BytesIO(data)).namelist()
+    assert any(n.endswith(".xlsx") for n in names)
+    assert any(n.endswith(".pdf") or n.endswith(".html") for n in names)
 
 
 @requires_db

@@ -154,4 +154,22 @@ if fb is not None and not fb.empty and "status" in fb.columns:
     fb["status"] = fb["status"].map(lambda s: FEEDBACK_STATUS_LABELS.get(s, s))
 show_df(fb)
 
+# ---- 老闆一頁 列印 / 月報包（EXEC）----
+if user["role"] == "EXEC":
+    from datetime import date
+    from core.docs.home import build_doc as _home_doc
+    from core.pack import build_pack, pack_filter
+    from reports import export as X
+
+    st.divider()
+    st.subheader("📄 列印 / 月報包")
+    _f = pack_filter(date(this_month.year, 1, 1), this_month, scope="media")
+    X.ui.export_bar(_home_doc(_f, user), key="home")
+    st.caption("「老闆一頁」PDF：本月 KPI、各公司 vs 目標、近 12 月趨勢、待處理提醒。")
+    if st.button("📦 產生本月月報包（首頁＋公司／客戶／業務／銷售分析，一個 PDF＋每頁 Excel）"):
+        with st.spinner("組月報包中（第一次在雲端約 1 分鐘，需下載排版引擎）…"):
+            _pack = build_pack(_f, user)
+        st.download_button("⬇ 下載月報包 zip", data=_pack, file_name=f"月報包_{ym_text(this_month)}.zip",
+                           mime="application/zip", key="pack_dl")
+
 feedback_widget("home")
