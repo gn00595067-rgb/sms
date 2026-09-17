@@ -42,7 +42,7 @@ def _group_agg(a, b):
 
 
 def _yoy(en: float, pen: float):
-    """同期成長率；公司別重整（2024 業績登在瑞迪）或分母 0 時回不可比字串，避免顯示 33313% 這種假數字。"""
+    """同期成長率；公司別重整（2024 業績集中在單一主體）或分母 0 時回不可比字串，避免顯示 33313% 這種假數字。"""
     if not pen or pen <= 0:
         return "同期不可比"
     r = (en - pen) / pen
@@ -55,6 +55,8 @@ def build_doc(f: dict, user: dict | None = None, *, metric: str = "除佣實收"
     scope = f.get("scope")
 
     lines = A.load_lines(yf, yt, scope=scope)
+    if not lines.empty:
+        lines["company"] = lines["company"].replace({"瑞迪": "東吳"})   # 瑞迪併入東吳、不單獨顯示
     cust_by_co = lines.groupby("company")["customer_id"].nunique() if not lines.empty else {}
     grp_cust = int(lines["customer_id"].nunique()) if not lines.empty else 0
 
@@ -207,7 +209,7 @@ def build_doc(f: dict, user: dict | None = None, *, metric: str = "除佣實收"
         net_by = lt.pivot_table(index="company", columns="report_platform", values="net_amount", aggfunc="sum", fill_value=0.0)
         num_by = lt.pivot_table(index="company", columns="report_platform", values=numer, aggfunc="sum", fill_value=0.0)
         cust_by = lt.groupby("company")["customer_id"].nunique()
-        order = [c for c in ("聲活", "東吳", "鉑霖", "瑞迪") if c in num_by.index]
+        order = [c for c in ("聲活", "東吳", "鉑霖") if c in num_by.index]
         grand_net = float(lt["net_amount"].sum())
         rows = []
         for name in order + ["三公司合計"]:
@@ -251,7 +253,7 @@ def build_doc(f: dict, user: dict | None = None, *, metric: str = "除佣實收"
         keep = (bvf.assign(v=bvf["booked_net"].astype(float).abs() + bvf["forecast_amount"].astype(float).abs())
                 .groupby("company")["v"].sum())
         _order = {"聲活": 0, "東吳": 1, "鉑霖": 2}
-        companies = sorted([c for c in keep[keep > 0].index], key=lambda c: _order.get(c, 9))
+        companies = sorted([c for c in keep[keep > 0].index if c != "瑞迪"], key=lambda c: _order.get(c, 9))
         rows = []
         for co in companies:
             sub = bvf[bvf["company"] == co]

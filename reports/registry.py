@@ -52,7 +52,7 @@ REPORTS: dict[str, dict] = {
         "totals": True,
         "roles": ["MEDIA", "FINANCE", "EXEC"],
         "sales_scope": False,
-        "note": "第一層＝子公司（東吳/鉑霖/瑞迪）對客戶線的除佣實收−實付；"
+        "note": "第一層＝子公司（東吳/鉑霖）對客戶線的除佣實收−實付；"
                 "第二層＝聲活線＋轉撥線的除佣實收−實付−該月平台歸類固定成本。此定義為假設，待 Peggy 姐確認（docs/ASSUMPTIONS.md）。",
     },
     "media_volume": {

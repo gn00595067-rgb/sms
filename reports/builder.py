@@ -24,7 +24,7 @@ DIMENSIONS: dict[str, tuple] = {
     "year":              ("年", "perf_year::text", "asc"),
     "quarter":           ("季", "(perf_year::text || 'Q' || perf_quarter::text)", "asc"),
     "month":             ("月", "ym", "asc"),
-    "company":           ("公司", "company", "fixed:聲活,東吳,鉑霖,瑞迪"),
+    "company":           ("公司", "company", "fixed:聲活,東吳,鉑霖"),
     "report_platform":   ("報表平台", "report_platform", "fixed:全家企頻,萬家福,新鮮視,廣播,健康視,營運,其它"),
     "platform":          ("平台", "platform", "asc"),
     "media_channel":     ("電台/頻道", "media_channel", "asc"),
