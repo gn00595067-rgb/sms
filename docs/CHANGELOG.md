@@ -88,3 +88,10 @@
 - **年度發稿明細（喬商版型）`reports/annual_detail.py`**：口徑＝發稿口徑，一家公司一個工作表，三段——第一段各業務客戶數與四平台發稿總計、第二段各業務每客戶（分平台）、第三段逐筆明細（金額落對應平台欄、末列各平台小計＋總計）。`include_group_profit` 可加集團毛利/利率欄。畫面預覽第一段＋第二段，第三段只在 Excel。**驗收**：2025 鉑霖 許雅婷 11,431,326／4,949,150／43.3%／54 家；末列 11,907,516／6,932,238／4,975,277——對到元。
 - **平台總計總覽（老闆版 Excel）`reports/platform_overview.py`**：八區塊（除佣／成本／帳上毛利／利率 × 含廣播／不含廣播）＋集團毛利＋客戶數（含／不含廣播），公司×報表平台、三公司合計列。**驗收**：2025 區塊一 134,303,021、區塊五 98,408,698、客戶數 265／259。
 - **測試** `tests/test_boss_reports.py`（4 tests）＋ `test_reports.py` 略過 custom 模式；報表中心 custom 兩報表 headless 煙霧零例外；全套 `pytest -q` = **52 passed、零回歸**。
+
+## 階段 M — 自訂條件報表產生器（CLAUDE_CODE_TASK_4 §5）
+- **`sql/008_report_builder.sql`**：`v_report_line` 加 `group_profit_alloc`（線層看集團毛利＝line.net / deal.ext_net × deal.group_profit）；`saved_report` 表（JSON 定義、owner、is_shared、audit trigger）。
+- **引擎 `reports/builder.py`**：`DIMENSIONS`（17）／`MEASURES`（14）／`FILTER_COLS` 全白名單；`build_sql` 值全參數化、SALES 自動限縮、維度空→明細模式（limit 50000）；`run`→長表、`shape`→樞紐（欄維度＋合計欄群）＋比率事後算（Σ毛利÷Σ除佣）＋合計列＋佔比＋前 N（每第一層）；`build_excel` 兩層表頭；`save_saved/list_saved/delete_saved/load_definition` CRUD（SALES 不能分享、載回仍白名單清洗）。
+- **頁面 `pages_app/report_builder.py`**（側欄「📐 自訂報表」）：期間 / 口徑 / 篩選 / 列(≤3)·欄·指標 / 合計·佔比·前 N / 查詢 / 下載 Excel / 存成我的報表（我的＋同仁分享下拉）。
+- **種子 `scripts/seed_saved_reports.py`**：老闆工作簿六張表的定義（is_shared、owner=EXEC），一登入即可重跑，也是產生器驗收。
+- **測試** `tests/test_builder.py`（9 tests）：白名單丟未知維度/指標、注入→明細模式、參數化、SALES 限縮；重現 平台總覽 134,303,021 / 聲活利率 59.2% / 月樞紐 2025/01 16,050,639 且合計仍 134,303,021 / 前 N / 明細模式 / 六個種子含·不含廣播 134,303,021·98,408,698。全套 `pytest -q` = **61 passed、零回歸**；自訂報表頁 headless 煙霧零例外。

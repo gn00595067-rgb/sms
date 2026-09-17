@@ -29,6 +29,7 @@ PAGES = {
     "customer_detail":      ("pages_app/customer_detail.py",      "客戶頁",   "🔎", ["MEDIA", "FINANCE", "EXEC", "SALES"]),
     "salesperson_detail":   ("pages_app/salesperson_detail.py",   "業務頁",   "🧑", ["MEDIA", "FINANCE", "EXEC", "SALES"]),
     "reports":     ("pages_app/reports.py",     "報表中心",    "📈", ["MEDIA", "FINANCE", "EXEC", "SALES"]),
+    "report_builder": ("pages_app/report_builder.py", "自訂報表", "📐", ["MEDIA", "FINANCE", "EXEC", "SALES"]),
     "bonus":       ("pages_app/bonus.py",       "業務獎金",    "🎯", ["EXEC", "SALES"]),
     "feedback":    ("pages_app/feedback.py",    "問題回報清單", "📮", ["EXEC"]),
     "audit":       ("pages_app/audit.py",       "稽核紀錄",    "🕵️", ["EXEC"]),
@@ -42,7 +43,7 @@ GROUPS = {
     "財務": ["invoices"],
     "分析": ["analysis_customer", "analysis_salesperson", "analysis_sales", "analysis_company",
              "customer_detail", "salesperson_detail"],
-    "報表": ["reports", "bonus"],
+    "報表": ["reports", "report_builder", "bonus"],
     "管理": ["masters", "feedback", "audit", "users"],
     "帳號": ["account"],
 }
