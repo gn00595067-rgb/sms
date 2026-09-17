@@ -101,56 +101,76 @@ A.kpi_row([
 st.divider()
 
 # ---- 兩張圖：ABC 分級 / 產業別（單位：萬）----
+# ---- 兩張圖交叉連動：點 ABC 級別 → 產業圖只算該級客戶；點產業 → ABC 圖只算該產業客戶 ----
+sel_tier = st.session_state.get("abc_focus")
+sel_ind = st.session_state.get("ind_focus")
+
+# 產業聚合（若選了 ABC 級別，只算該級客戶的訂單）
+_tier_custs = set(cust[cust["abc_tier"] == sel_tier]["customer"]) if sel_tier else None
+dw_ind = dw[dw["customer"].isin(_tier_custs)] if sel_tier else dw
+ind = A.agg_industries(dw_ind, dp)
+top = ind.head(8)[["industry", "ext_net", "customers", "booked_margin"]].copy()
+other_label, other_inds = None, []
+if len(ind) > 8:
+    others = ind.iloc[8:]
+    other_inds = others["industry"].tolist()
+    other_label = f"其他 {len(others)} 類"
+    onet = float(others["ext_net"].sum())
+    top = pd.concat([top, pd.DataFrame([{
+        "industry": other_label, "ext_net": onet,
+        "customers": int(others["customers"].sum()),
+        "booked_margin": float(others["booked_profit"].sum()) / onet if onet else 0,
+    }])], ignore_index=True)
+
+# ABC 聚合（若選了產業，只算該產業的客戶）
+if sel_ind:
+    _ind_custs = set(dw[dw["industry"].isin(other_inds if sel_ind == other_label else [sel_ind])]["customer"])
+    cust_abc = cust[cust["customer"].isin(_ind_custs)]
+else:
+    cust_abc = cust
+
 c1, c2 = st.columns(2)
 with c1:
-    st.markdown("**客戶分級（ABC）：多少客戶貢獻 80% 業績**　·　點長條看該級公司")
-    abc = cust.groupby("abc_tier").agg(n=("customer", "count"), net=("ext_net", "sum")).reindex(["A", "B", "C"]).dropna()
+    st.markdown("**客戶分級（ABC）：多少客戶貢獻 80% 業績**"
+                + (f"　·　僅「{sel_ind}」的客戶" if sel_ind else "　·　點長條看該級公司"))
+    abc = cust_abc.groupby("abc_tier").agg(n=("customer", "count"), net=("ext_net", "sum")).reindex(["A", "B", "C"]).dropna()
     tier_label = {"A": "A 級（累計 80%）", "B": "B 級（80–95%）", "C": "C 級（最後 5%）"}
     tier_color = {"A": COLORS["accent"], "B": COLORS["accent2"], "C": COLORS["accent3"]}
     tiers = list(abc.index)
-    sel_tier = st.session_state.get("abc_focus")
-    fig = go.Figure()
-    for tier in tiers:
-        dim = sel_tier is not None and tier != sel_tier
-        fig.add_bar(y=[tier_label[tier]], x=[float(abc.loc[tier, "net"]) / 10000], orientation="h",
-                    marker_color=tier_color[tier], name=tier, cliponaxis=False,
-                    customdata=[tier], opacity=0.35 if dim else 1.0,
-                    text=f"{wan(abc.loc[tier, 'net'])}｜{int(abc.loc[tier, 'n'])} 家",
-                    textposition="outside", hovertemplate="%{text}　（點選）<extra></extra>")
-    fig.update_layout(showlegend=False, height=220, margin=dict(l=8, r=8, t=8, b=8),
-                      yaxis=dict(autorange="reversed"), font=dict(family="Noto Sans TC, Microsoft JhengHei"))
-    fig.update_xaxes(range=[0, float(abc["net"].max()) / 10000 * 1.45], ticksuffix="萬", tickformat=",.0f")
-    abc_ev = st.plotly_chart(fig, use_container_width=True, key="abc_chart", on_select="rerun")
-    # 解析點選 → 記住被點的級別（customdata 優先，curve_number 後備）
-    if abc_ev and getattr(abc_ev, "selection", None) and abc_ev.selection.get("points"):
-        p = abc_ev.selection["points"][0]
-        cd = p.get("customdata")
-        picked = (cd[0] if isinstance(cd, (list, tuple)) and cd else cd) if cd else None
-        if picked is None and p.get("curve_number") is not None and p["curve_number"] < len(tiers):
-            picked = tiers[p["curve_number"]]
-        if picked and picked != sel_tier:
-            st.session_state["abc_focus"] = picked
-            st.rerun()
-    if sel_tier:
-        if st.button("← 顯示全部（清除分級篩選）", key="abc_clear"):
-            del st.session_state["abc_focus"]
+    if abc.empty:
+        st.caption("此產業無客戶。")
+    else:
+        fig = go.Figure()
+        for tier in tiers:
+            dim = sel_tier is not None and tier != sel_tier
+            fig.add_bar(y=[tier_label[tier]], x=[float(abc.loc[tier, "net"]) / 10000], orientation="h",
+                        marker_color=tier_color[tier], name=tier, cliponaxis=False,
+                        customdata=[tier], opacity=0.35 if dim else 1.0,
+                        text=f"{wan(abc.loc[tier, 'net'])}｜{int(abc.loc[tier, 'n'])} 家",
+                        textposition="outside", hovertemplate="%{text}　（點選）<extra></extra>")
+        fig.update_layout(showlegend=False, height=220, margin=dict(l=8, r=8, t=8, b=8),
+                          yaxis=dict(autorange="reversed"), font=dict(family="Noto Sans TC, Microsoft JhengHei"))
+        fig.update_xaxes(range=[0, float(abc["net"].max()) / 10000 * 1.45], ticksuffix="萬", tickformat=",.0f")
+        abc_ev = st.plotly_chart(fig, use_container_width=True, key="abc_chart", on_select="rerun")
+        # 點選 ABC → 設定分級焦點、清掉產業焦點（一次一個作用中）
+        if abc_ev and getattr(abc_ev, "selection", None) and abc_ev.selection.get("points"):
+            p = abc_ev.selection["points"][0]
+            cd = p.get("customdata")
+            picked = (cd[0] if isinstance(cd, (list, tuple)) and cd else cd) if cd else None
+            if picked is None and p.get("curve_number") is not None and p["curve_number"] < len(tiers):
+                picked = tiers[p["curve_number"]]
+            if picked and picked != sel_tier:
+                st.session_state["abc_focus"] = picked
+                st.session_state.pop("ind_focus", None)
+                st.rerun()
+    if sel_tier or sel_ind:
+        if st.button("← 顯示全部（清除連動篩選）", key="abc_clear"):
+            st.session_state.pop("abc_focus", None)
+            st.session_state.pop("ind_focus", None)
             st.rerun()
 with c2:
-    st.markdown("**產業別：業績、客戶數、毛利率（前 8 + 其他）**　·　點長條看該產業公司")
-    ind = A.agg_industries(dw, dp)
-    top = ind.head(8)[["industry", "ext_net", "customers", "booked_margin"]].copy()
-    other_label, other_inds = None, []
-    if len(ind) > 8:
-        others = ind.iloc[8:]
-        other_inds = others["industry"].tolist()
-        other_label = f"其他 {len(others)} 類"
-        onet = float(others["ext_net"].sum())
-        top = pd.concat([top, pd.DataFrame([{
-            "industry": other_label, "ext_net": onet,
-            "customers": int(others["customers"].sum()),
-            "booked_margin": float(others["booked_profit"].sum()) / onet if onet else 0,
-        }])], ignore_index=True)
-    sel_ind = st.session_state.get("ind_focus")
+    st.markdown("**產業別：業績、客戶數、毛利率（前 8 + 其他）**"
+                + (f"　·　僅 {sel_tier} 級客戶" if sel_tier else "　·　點長條看該產業公司"))
     bar_colors = [COLORS["accent"] if (sel_ind is None or lbl == sel_ind) else "#cbd5e1"
                   for lbl in top["industry"]]
     fig2 = go.Figure()
@@ -162,8 +182,10 @@ with c2:
                  textposition="outside", hovertemplate="%{y}: %{text}　（點選）<extra></extra>")
     fig2.update_layout(showlegend=False, height=max(220, 26 * len(top)), margin=dict(l=8, r=8, t=8, b=8),
                        yaxis=dict(autorange="reversed"), font=dict(family="Noto Sans TC, Microsoft JhengHei"))
-    fig2.update_xaxes(range=[0, float(top["ext_net"].max()) / 10000 * 1.5], ticksuffix="萬", tickformat=",.0f")
+    fig2.update_xaxes(range=[0, float(top["ext_net"].max()) / 10000 * 1.5] if len(top) else [0, 1],
+                      ticksuffix="萬", tickformat=",.0f")
     ind_ev = st.plotly_chart(fig2, use_container_width=True, key="ind_chart", on_select="rerun")
+    # 點選產業 → 設定產業焦點、清掉分級焦點
     if ind_ev and getattr(ind_ev, "selection", None) and ind_ev.selection.get("points"):
         p = ind_ev.selection["points"][0]
         cd = p.get("customdata")
@@ -172,10 +194,7 @@ with c2:
             picked = top["industry"].iloc[p["point_index"]]
         if picked and picked != sel_ind:
             st.session_state["ind_focus"] = picked
-            st.rerun()
-    if sel_ind:
-        if st.button("← 顯示全部（清除產業篩選）", key="ind_clear"):
-            del st.session_state["ind_focus"]
+            st.session_state.pop("abc_focus", None)
             st.rerun()
 
 # ---- 點選 ABC 長條 → 動態列出該級公司 ----
