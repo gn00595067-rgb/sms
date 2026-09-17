@@ -18,7 +18,7 @@ from core import analysis as A
 
 PLATFORMS = ["全家企頻", "萬家福", "新鮮視", "廣播", "健康視"]
 OWN = ["全家企頻", "萬家福", "新鮮視", "健康視"]          # 自媒體（不含廣播）
-COMPANIES = ["聲活", "東吳", "鉑霖", "瑞迪"]
+COMPANIES = ["聲活", "東吳", "鉑霖"]
 
 
 def _base(year: int, scope: dict | str = "media", user: dict | None = None) -> pd.DataFrame:
@@ -26,6 +26,7 @@ def _base(year: int, scope: dict | str = "media", user: dict | None = None) -> p
     if lines.empty:
         return lines
     lines = lines.copy()
+    lines["company"] = lines["company"].replace({"瑞迪": "東吳"})   # 瑞迪併入東吳、不單獨列（三公司合計不變）
     lines["_gp"] = A.line_group_profit(lines)
     return lines
 
