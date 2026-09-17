@@ -28,7 +28,8 @@ from core.format import PLATFORM_GROUP_ORDER
 
 # 在 Python 端加總的數值欄（與 generator 的 NUM 一致）
 NUM = ["ext_net", "booked_profit", "group_profit", "net_profit",
-       "net_cp", "net_fresh", "net_radio", "net_other"]
+       "net_cp", "net_fresh", "net_radio", "net_other",
+       "net_cp_family", "net_cp_carrefour", "net_clinic"]   # 007：報表平台四欄+健康視
 # 額外需要轉 float 的欄
 _FLOAT_EXTRA = ["ext_gross", "booked_cost", "production_cost", "recognized_amount",
                 "alloc_fixed_cost", "ic_net", "ic_cost", "purchased_slots", "total_seconds"]
@@ -453,7 +454,7 @@ def salesperson_platform(ym_from: date, ym_to: date, filters: dict | None = None
     by='platform' → 個別平台（家樂福企頻/健康視…）；by='platform_group' → 平台歸類（企頻/新鮮視…）。
     回傳 pivot：index=業務、欄=各平台、末欄「合計」、末列「（全部業務合計）」。尊重期間 / 公司 / 產業 / 客戶 / SALES 範圍。
     """
-    if by not in ("platform", "platform_group"):
+    if by not in ("platform", "platform_group", "report_platform"):
         raise ValueError(by)
     filters = filters or {}
     where = ["not is_intercompany", "perf_ym between %s and %s"]
@@ -483,8 +484,12 @@ def salesperson_platform(ym_from: date, ym_to: date, filters: dict | None = None
         return df
     df["net"] = df["net"].astype(float)
     piv = df.pivot_table(index="salesperson", columns="col", values="net", aggfunc="sum").fillna(0.0)
-    # 欄依總額由大到小排；加「合計」欄與總計列
-    piv = piv[piv.sum(axis=0).sort_values(ascending=False).index]
+    # 欄排序：報表平台用固定欄序（老闆版），其餘依總額由大到小
+    if by == "report_platform":
+        piv = piv[[p for p in REPORT_PLATFORM_ORDER if p in piv.columns]
+                  + [c for c in piv.columns if c not in REPORT_PLATFORM_ORDER]]
+    else:
+        piv = piv[piv.sum(axis=0).sort_values(ascending=False).index]
     piv["合計"] = piv.sum(axis=1)
     piv = piv.sort_values("合計", ascending=False)
     piv.loc["（全部業務合計）"] = piv.sum(numeric_only=True)
@@ -554,6 +559,11 @@ def agg_customers(df: pd.DataFrame, prev_df: pd.DataFrame | None = None,
     out["last_txn"] = g["perf_ym"].max()
     out["main_salesperson"] = g.apply(
         lambda x: x.groupby("salesperson")["ext_net"].sum().idxmax())
+    # 跨公司 / 跨業務（§3.4：喬商是東吳、聲活、鉑霖都在做）——依金額由大到小
+    out["companies_multi"] = g.apply(
+        lambda x: "、".join(x.groupby("company")["ext_net"].sum().sort_values(ascending=False).index))
+    out["salespeople_multi"] = g.apply(
+        lambda x: "、".join(x.groupby("salesperson")["ext_net"].sum().sort_values(ascending=False).index[:5]))
     # 產業：優先用「訂單產業眾數」（deal.industry 幾乎都有），主檔為空才 fallback（P0-5）
     if "industry" in d.columns:
         out["industry_orders"] = g["industry"].agg(

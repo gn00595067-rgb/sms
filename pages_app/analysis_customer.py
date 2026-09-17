@@ -265,7 +265,11 @@ fig3.update_layout(height=430, margin=dict(l=8, r=8, t=8, b=8),
 st.plotly_chart(fig3, use_container_width=True)
 
 # ---- 客戶排名表（精簡欄，可展開全部）----
-st.markdown("**客戶排名**（點一列 → 客戶頁；下載 Excel 為完整名單）")
+# §3.4：公司篩選時標題標公司，佔比分母 = 該公司合計（dw 已被 load_deals 依公司篩選）
+_co = f.get("company")
+_rank_title = (f"**【{_co}】客戶排名**（佔比＝佔該公司總計；點一列 → 客戶頁）" if _co
+               else "**客戶排名**（點一列 → 客戶頁；下載 Excel 為完整名單）")
+st.markdown(_rank_title)
 show_all = st.toggle("顯示全部欄位", value=True, key="cust_allcols")
 trends, _months = A.customer_trends(cust.head(50)["customer"].tolist(), f["ym_from"], f["ym_to"])
 tbl = cust.head(50).copy()
@@ -289,19 +293,23 @@ full = [
     ("rank_in_year", "#", "int", {"width": "small"}),
     ("customer", "客戶", "text"),
     ("industry", "產業", "text"),
-    ("main_salesperson", "主要業務", "text"),
+    ("companies_multi", "公司(多)", "text", {"width": "small"}),
+    ("salespeople_multi", "業務(多)", "text"),
     ("status", "狀態", "text", {"width": "small"}),
     ("ext_net", "除佣實收", "money"),
     ("yoy_text", "同期%", "text", {"width": "small"}),
     ("share", "佔比", "progress", {"max": float(cust["share"].max())}),
     ("cum_share", "累計佔比", "pct"),
+    ("net_cp_family", "全家企頻", "money"),
+    ("net_cp_carrefour", "萬家福", "money"),
+    ("net_fresh", "新鮮視", "money"),
+    ("net_radio", "廣播", "money"),
     ("booked_profit", "帳上毛利", "money"),
     ("booked_margin", "毛利率", "pct"),
     ("net_margin", "淨利率", "pct"),
     ("deals", "筆數", "int", {"width": "small"}),
     ("months_since_last", "距上次交易", "int", {"width": "small"}),
     ("avg_deal", "平均單筆", "money"),
-    ("mix", "平台組合", "text"),
     ("trend", "月趨勢", "line"),
     ("strategy_hint", "策略提示", "text"),
 ]

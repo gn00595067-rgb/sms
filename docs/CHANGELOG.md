@@ -74,3 +74,11 @@
 - **集團毛利橋收斂**：`v_group_month.ic_add_back` 改為「集團毛利 − 帳上毛利」（一定收斂），另加 `ic_transfer_gross`（轉撥收入總額明細）供瀑布圖 hover；公司/集團月表補七欄報表平台。
 - **新增 `v_report_line`**：老闆口徑的線層 view（交換併回原業務 `salesperson_merged`、走期文字 `air_period_text`、`ym`），給階段 K/L/M 用。
 - **驗收**（`tests/test_analysis.py::test_boss_workbook_2025`）：2025 發稿口徑 聲活 71,533,523／東吳 50,325,792／瑞迪 536,190／鉑霖 11,907,516；合計 134,303,021、帳上毛利 67,416,333、客戶 265；不含廣播 98,408,698／259 家；東吳+瑞迪 全家企頻 32,378,519／萬家福 5,630,860／新鮮視 9,535,360／廣播 3,317,243——全部對到元。全套 `pytest -q` = **45 passed、零回歸**。
+
+## 階段 K — 併入現有分析頁（CLAUDE_CODE_TASK_4）
+- **口徑（scope）模型**：`core.analysis.SCOPE_PRESETS / resolve_scope`——分析口徑（現狀、預設）/ 發稿口徑（老闆版）/ 自訂（五個旗標可逐項勾）；`scope_bar` 元件併入 `filter_bar_analysis(show_scope=)`，向後相容。
+- **線層載入 `load_lines`**：`v_report_line` 期間切片、依 scope 過濾、交換併回原業務（`salesperson_merged`）、`merge_ruidi` 併瑞迪→東吳。`scope_bridge`：分析口徑→發稿口徑的收斂橋（回答老闆「為什麼數字不一樣」）。`line_group_profit`：線層依合約比例分回集團毛利（§4.1）。
+- **公司分析（§3.1/§3.2）**：新增「平台總計總覽」表（公司 × 報表平台、指標切換 除佣/成本/帳上毛利/利率/集團毛利/利率、平台範圍快選 全部/自媒體/只看廣播、客戶數不重複、佔比、三公司合計列），取代舊「平台歸類」表；公司卡加客戶數；發稿口徑顯示口徑差異對照行。
+- **業務分析（§3.3）**：業務 × 平台矩陣加「報表平台（老闆四欄+健康視）」細度選項（`salesperson_platform` 支援 `by="report_platform"`，固定欄序）。
+- **客戶分析（§3.4）**：排名「顯示全部欄位」加「公司(多)／業務(多)／全家企頻／萬家福／新鮮視／廣播」欄（`agg_customers` 加 `companies_multi/salespeople_multi`，NUM 補三欄）；公司篩選時標題標公司、佔比＝佔該公司總計。
+- 說明：分析頁排名主體維持合約層（分析口徑、既有 40+ 測試不動）；scope 切換與四平台欄為新增，客戶/業務頁全面改線層為後續（§3.5）。四個分析頁 headless 煙霧零例外；全套 `pytest -q` = **48 passed、零回歸**。

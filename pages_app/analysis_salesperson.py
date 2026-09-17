@@ -134,9 +134,11 @@ if top8:
 # ---- 業務 × 平台 總計 ----
 st.divider()
 st.markdown("**業務 × 平台 總計**（每個業務在各媒體平台賣出的除佣實收）")
-gran = st.radio("平台細度", ["個別平台（家樂福企頻/健康視…）", "平台歸類（企頻/新鮮視/廣播…）"],
+gran = st.radio("平台細度", ["報表平台（老闆四欄+健康視）", "個別平台（家樂福企頻/健康視…）",
+                            "平台歸類（企頻/新鮮視/廣播…）"],
                 horizontal=True, key="sp_plat_gran")
-by = "platform" if gran.startswith("個別") else "platform_group"
+by = ("report_platform" if gran.startswith("報表平台")
+      else "platform" if gran.startswith("個別") else "platform_group")
 mat = A.salesperson_platform(f["ym_from"], f["ym_to"], f, exclude_barter=f["exclude_barter"], user=user, by=by)
 if mat is None or mat.empty:
     st.info("此條件查無資料。")
