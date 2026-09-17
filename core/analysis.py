@@ -838,9 +838,11 @@ def kpi_row(items: list[dict]) -> None:
         with col:
             delta = it.get("delta")
             delta_txt = None
-            if delta is not None and not (isinstance(delta, float) and pd.isna(delta)):
+            if isinstance(delta, str):
+                delta_txt = delta                       # 已是文字（例：「同期不可比」）直接顯示
+            elif delta is not None and not (isinstance(delta, float) and pd.isna(delta)):
                 delta_txt = f"{pct(delta, already_ratio=True)} 同期"
-            st.metric(it["label"], it["value"], delta=delta_txt)
+            st.metric(it["label"], it["value"], delta=delta_txt, delta_color="off" if isinstance(delta, str) else "normal")
             if it.get("sub"):
                 st.caption(it["sub"])
 

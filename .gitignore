@@ -13,6 +13,10 @@ backup_*.zip
 # 分析樣稿產出（含真實客戶資料，可用 tools/mockup_generator.py 重跑）
 docs/report_design_mockup.html
 
+# 匯出層樣本 / 月報包產出（含真實客戶資料，可用 tools/export_sample_reference.py 重跑）
+samples/
+pack/
+
 # python
 .venv/
 __pycache__/
