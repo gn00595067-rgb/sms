@@ -8,7 +8,8 @@ from core.data import query_df
 from core.format import ym_text
 from core.ui import feedback_widget, filters_bar, page_header, show_df
 from reports.query import salesperson_name
-from reports.render_excel import build_excel
+from reports import export as X
+from reports.export import compat
 
 user = require_role("MEDIA", "FINANCE", "EXEC", "SALES")
 page_header("🔍 業績查詢", "查 v_deal_line_flat；可下載 Excel、跳轉修改。")
@@ -53,20 +54,25 @@ st.caption(f"共 {0 if df is None else len(df)} 筆" + ("（上限 5000）" if d
 show_df(df, cols=cols)
 
 if df is not None and not df.empty:
-    c1, c2 = st.columns(2)
-    c1.download_button(
-        "⬇ 下載 Excel",
-        data=build_excel(df, "業績查詢", "", columns=[c for c in cols if c in df.columns]),
-        file_name="deal_search.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-    )
     # 跳轉修改（MEDIA/EXEC）
     if user["role"] in ("MEDIA", "EXEC"):
-        with c2:
-            contract = st.selectbox("選合約編號修改", sorted(df["contract_no"].unique()))
-            if st.button("✏️ 開啟修改", use_container_width=True):
-                st.session_state["edit_contract"] = contract
-                st.switch_page("pages_app/deal_entry.py")
+        contract = st.selectbox("選合約編號修改", sorted(df["contract_no"].unique()))
+        if st.button("✏️ 開啟修改"):
+            st.session_state["edit_contract"] = contract
+            st.switch_page("pages_app/deal_entry.py")
+    _fp = []
+    if filters.get("ym_from") and filters.get("ym_to"):
+        _fp.append(f"{ym_text(filters['ym_from'])}–{ym_text(filters['ym_to'])}")
+    for _k, _lab in (("company", "公司"), ("platform", "平台"), ("line_type", "線類型"),
+                     ("customer", "客戶"), ("contract_no", "合約")):
+        if filters.get(_k):
+            _fp.append(f"{_lab}={filters[_k]}")
+    if low_margin:
+        _fp.append("只看低毛利")
+    st.divider()
+    doc = compat.record_doc("業績查詢", filter_text="　".join(_fp), user=user, orientation="landscape")
+    compat.add_table(doc, "業績查詢", df, columns=[c for c in cols if c in df.columns], wide=True,
+                     max_rows_pdf=300, note="完整清單（可超過 300 筆）請用 Excel。金額單位：元。")
+    X.ui.export_bar(doc, key="ds")
 
 feedback_widget("deal_search")

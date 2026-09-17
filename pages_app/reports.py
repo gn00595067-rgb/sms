@@ -9,8 +9,8 @@ from core.format import ym_text
 from core.ui import feedback_widget, filters_bar, page_header, show_df
 from reports.query import run_report, totals_row
 from reports.registry import report, reports_for_role
-from reports.render_excel import build_excel
-from reports.render_html import build_html
+from reports import export as X
+from reports.export import compat
 
 user = require_role("MEDIA", "FINANCE", "EXEC", "SALES")
 page_header("📈 報表中心", "選報表 → 設篩選 → 查詢；可下載 Excel 或列印。")
@@ -97,18 +97,11 @@ if st.session_state.get(f"{key}_run"):
     if df is not None and not df.empty:
         cols = list(df.columns)
         ft = _filter_text()
-        c1, c2 = st.columns(2)
-        c1.download_button(
-            "⬇ 下載 Excel",
-            data=build_excel(df, r["title"], ft, columns=cols, totals=tot or None),
-            file_name=f"{key}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
-        if c2.button("🖨 列印版", use_container_width=True):
-            st.session_state[f"{key}_print"] = True
-        if st.session_state.get(f"{key}_print"):
-            st.components.v1.html(build_html(df, r["title"], ft, columns=cols, totals=tot or None),
-                                  height=600, scrolling=True)
+        st.divider()
+        doc = compat.record_doc(r["title"], subtitle=r.get("note"), filter_text=ft, user=user,
+                                orientation="landscape")
+        compat.add_table(doc, r["title"], df, columns=cols, totals=tot or None,
+                         note="金額單位：元；比率＝Σ分子÷Σ分母。")
+        X.ui.export_bar(doc, key=key)
 
 feedback_widget("reports")

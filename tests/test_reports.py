@@ -16,8 +16,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from conftest import requires_db  # noqa: E402
 from reports.registry import REPORTS  # noqa: E402
 from reports.query import run_report  # noqa: E402
-from reports.render_excel import build_excel  # noqa: E402
-from reports.render_html import build_html  # noqa: E402
+from reports import export as X  # noqa: E402
+from reports.export import compat  # noqa: E402
 
 EXEC_USER = {"id": 0, "username": "test", "role": "EXEC", "salesperson_id": None}
 
@@ -42,10 +42,12 @@ def test_report_runs_and_exports(key):
     df = run_report(key, filters, group_by_label=group_label, user=EXEC_USER, top_n=top_n)
     assert isinstance(df, pd.DataFrame)
 
-    cols = list(df.columns)
-    xlsx = build_excel(df, r["title"], "測試", columns=cols)
+    # 記錄式頁面（報表中心）改走匯出層 compat：df → Doc → Excel / 列印版 HTML
+    doc = compat.record_doc(r["title"], filter_text="測試", user=EXEC_USER)
+    compat.add_table(doc, r["title"], df, columns=list(df.columns))
+    xlsx = X.to_xlsx(doc)
     assert isinstance(xlsx, bytes) and len(xlsx) > 0
-    html = build_html(df, r["title"], "測試", columns=cols)
+    html = X.to_html(doc, plotly_js="none")
     assert "<table" in html
 
 

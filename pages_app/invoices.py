@@ -10,6 +10,9 @@ from core.auth import require_role
 from core.finance import (add_writeoff, deal_defaults_for_invoice, list_ar,
                           load_invoice, mark_settled, save_invoice, writeoffs_for)
 from core.ui import feedback_widget, page_header, show_df
+from core.format import money
+from reports import export as X
+from reports.export import compat
 
 user = require_role("MEDIA", "FINANCE", "EXEC")
 can_edit = user["role"] in ("FINANCE", "EXEC")
@@ -39,7 +42,25 @@ with tab_ar:
             df = df[df["contract_no"].fillna("").str.contains(f_no.strip(), case=False)]
     st.caption(f"共 {len(df)} 筆；未收合計 "
                f"{int(pd.to_numeric(df['outstanding_amount'], errors='coerce').fillna(0).sum()):,}" if not df.empty else "共 0 筆")
-    show_df(df, cols=[c for c in AR_COLS if not df.empty and c in df.columns])
+    ar_cols = [c for c in AR_COLS if not df.empty and c in df.columns]
+    show_df(df, cols=ar_cols)
+    if not df.empty:
+        _out = pd.to_numeric(df["outstanding_amount"], errors="coerce").fillna(0)
+        _od = pd.to_numeric(df.get("overdue_days"), errors="coerce").fillna(0) if "overdue_days" in df.columns else _out * 0
+        st.divider()
+        doc = compat.record_doc("應收帳款", filter_text=("只看未結清" if only_open else "全部"), user=user, orientation="landscape")
+        doc.kpis([
+            {"label": "未收合計", "value": money(float(_out.sum()))},
+            {"label": "逾期未收", "value": money(float(_out[_od > 0].sum())), "sub": f"{int((_od > 0).sum())} 張"},
+            {"label": "逾期 90 天以上", "value": money(float(_out[_od >= 90].sum())), "sub": f"{int((_od >= 90).sum())} 張"},
+        ], per_row=3)
+        compat.add_table(doc, "應收明細", df, columns=ar_cols,
+                         totals={ar_cols[0]: f"共 {len(df)} 筆", "outstanding_amount": float(_out.sum())} if ar_cols else None,
+                         row_class=(lambda r: "warn" if pd.notna(r.get("overdue_days")) and float(r.get("overdue_days") or 0) > 0 else None),
+                         helps={"overdue_days": "距應交付日已逾期幾天（>0 才逾期）",
+                                "outstanding_amount": "帳款金額 − 已收金額", "amount_total": "應收帳款總額"},
+                         note="逾期（overdue_days>0）以紅色左邊條標示；未收金額＝帳款 − 已收。金額單位：元。")
+        X.ui.export_bar(doc, key="ar")
 
 # --------------------------------------------------------------- 發票編輯
 with tab_edit:
