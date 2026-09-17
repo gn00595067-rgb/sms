@@ -60,8 +60,23 @@ git push -u origin main
 改完程式 → `git add . && git commit -m "..." && git push` → Streamlit Cloud 自動重新部署。
 改了 SQL（新增 view）→ 在本機 `python scripts/db_apply.py`（線上 app 直接讀新 view，不需重部署）。
 
+## 6. 列印級 PDF / Excel 匯出（TASK_5）
+
+每一頁都能一鍵匯出「列印級」PDF（給老闆印）與 Excel（給同仁再算），版面固定不跑掉。PDF 用瀏覽器引擎（Chromium，經 Playwright）排版。
+
+- **requirements**：已含 `playwright>=1.47`（不要裝 kaleido）。
+- **本機 Windows**：`pip install -r requirements.txt` 後**不用**再裝任何東西——`reports/export/pdf.py` 會用內建 Edge（`channel="msedge"`）。想跟雲端完全一致：`python -m playwright install chromium`（約 150 MB）。字型用系統的微軟正黑體。
+- **Streamlit Community Cloud**：
+  1. repo 根目錄的 **`packages.txt`**（已放）會讓 Cloud 用 apt 裝 Chromium 所需程式庫 + `fonts-noto-cjk`（中文字型，缺了 PDF 會變方框）。
+  2. 第一次按「📄 產生 PDF」時 `pdf.py` 偵測到自帶 chromium 不存在，會自動 `playwright install chromium`（一次，約 30–60 秒，之後快取）。**首頁啟動不預裝**，避免拖慢喚醒。
+  3. 若 Cloud 自動安裝失敗：`packages.txt` 再加一行 `chromium`，Secrets 加 `EXPORT_CHROMIUM = "/usr/bin/chromium"`（`pdf.py` 會優先用它）。再不行，使用者仍有「🖨 列印版 HTML」可按瀏覽器 Ctrl+P 存 PDF；月報包也可在本機跑。
+- **月報包**：`python scripts/export_pack.py --ym-to 2026-08`（起月預設當年 1 月、發稿口徑）產出 `pack/月報包.zip`（一個連續頁碼 PDF + 每頁一個 Excel）。首頁 EXEC 也有「📦 產生本月月報包」按鈕跑同一支 `core/pack.py`。
+- 沒有任何瀏覽器引擎時，PDF 一律優雅退回「列印版 HTML」，結果一模一樣（同一份 HTML、同一套 CSS）。
+
 ## 常見問題
 
 - **連不上 DB**：確認用的是 **Session pooler**（不是 Direct connection，Streamlit Cloud 只有 IPv4）；密碼特殊字元要 URL 編碼（`@` → `%40`）。
+- **PDF 中文變方框**：主機缺中文字型 → Cloud 靠 `packages.txt` 的 `fonts-noto-cjk`；Windows／Mac 內建。
+- **Cloud 第一次按 PDF 等很久**：在下載排版引擎（chromium），一次性，之後快取。
 - **app 閒置後第一次開很慢**：Streamlit Cloud 免費方案閒置會休眠，第一次喚醒要等 30–60 秒，屬正常。
 - **ETL 很慢**：跨網對遠端 Supabase 逐筆寫入會慢（首爾約每筆 0.1–0.2 秒）；建議在本機一次跑完再部署，線上不需重跑 ETL。

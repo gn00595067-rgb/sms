@@ -100,3 +100,16 @@
 - **§3.5 客戶/業務頁接口徑切換**：`core.analysis.agg_customers_lines / agg_salespeople_lines`（線層彙總，含四平台/集團毛利率/跨公司業務/同期）；客戶、業務分析頁加 `show_scope=True`——分析口徑走原本完整互動頁；**發稿口徑／自訂口徑改用線層聚焦排名**（KPI＋四平台排名＋Excel），避免與分析口徑圖表混口徑。測試 `test_agg_lines_reconcile_to_boss`：2025 發稿口徑客戶/業務彙總加總 = 134,303,021、四平台加總相符。
 - **§5.6 報表中心列出自訂報表**：P7 頂部加「📐 自訂報表（我的／同仁分享）」展開清單，選一個 → 跳「自訂報表」頁並載入定義。
 - 全套 `pytest -q` = **62 passed、零回歸**；客戶/業務頁（分析＋發稿口徑）與報表中心 headless 煙霧零例外。銷售分析頁（訂單級距分佈本質為合約層）維持分析口徑。
+
+## 階段 J — 列印級 PDF / Excel 匯出層（CLAUDE_CODE_TASK_5）
+每一頁都能一鍵匯出列印級 PDF（給老闆印）＋ Excel（給同仁再算），版面固定不跑掉。核心＝一個中間格式 `Doc` → 三輸出（列印版 HTML / Chromium 經 Playwright 的 PDF / openpyxl 的 Excel）。**用戶追加需求：全站容易看不懂的欄位/數字都加說明**（放 `Col.help` + 表 note，畫面／PDF／Excel 三處一致）。
+- **J-1 地基**：`reports/export/`（doc/html/pdf/xlsx/theme/ui 六檔）；本機 Windows 走內建 Edge、Cloud 走自帶 chromium（第一次按 PDF 才裝）、都沒有時退回列印版 HTML。`requirements` 加 `playwright>=1.47`；根目錄 `packages.txt`（Cloud apt：chromium 程式庫 + fonts-noto-cjk）。`tests/test_export.py` 5 綠。
+- **J-2 公司分析**：`core/docs/`（無 streamlit 的 `build_doc`）＋ `_base.py`（headless 表頭 + 同期/毛利等統一說明字串）。頁面改 Doc 優先（`build_doc → X.ui.render → export_bar`）。防呆：公司別 2024→2025 重整同期除爆 → 顯示「同期不可比」；固定成本未設註明淨利＝集團毛利。
+- **J-3 客戶/業務/銷售分析 + 客戶頁/業務頁**：五頁接匯出層，保留原互動（點列鑽研、切換），只把乾淨靜態版組成 Doc；刪各頁 `render_excel` 下載鈕。熱圖進 Doc、Excel 對應 matrix。
+- **J-4 記錄式頁面**：報表中心/業績查詢/獎金/應收改 `reports/export/compat.py`（df + 欄位鍵 → Doc/Col，型別對照 `MONEY_COLS/RATIO_PCT_COLS/…`，與舊 render 同源）＋ `export_bar`；**刪 `reports/render_excel.py`、`render_html.py`**。應收加 KPI3（未收/逾期/逾 90 天）。
+- **J-5 首頁老闆一頁 + 月報包**：`core/docs/home.py`（KPI4/各公司 vs 目標/近 12 月/待處理提醒，portrait）＋ `core/pack.py`（`build_pack`→zip：連續頁碼 PDF + 每頁 Excel）；`scripts/export_pack.py` 與首頁「📦 產生本月月報包」按鈕共用。**資料把關**：逾期未收原 6.7 億是舊帳銷帳未登錄假象 → 改標「帳列未收（未銷帳）」+ 濾未來日 + 明講僅供參考；流失客戶原查 `status='流失風險'` 回 0（實際值 `'流失'`）→ 修正 35 家。
+- **J-6 老闆版兩報表 + single sheet**：`Doc.xlsx_layout="single"`＋`xlsx._single_sheet`（三段同一工作表）；`core/docs/annual_detail.py`（§4.1 到元：許雅婷 11,431,326/4,949,150/43.3%/54 家）、`core/docs/platform_overview.py`（§4.2：區塊一 134,303,021、區塊五 98,408,698、客戶 265/259）。報表中心 custom 兩報表 render() 加 export_bar；月報包 PACK 05-07 接上。
+- **J-7 文件**：DEPLOY 補「列印級 PDF/Excel 匯出」章（packages.txt / playwright install / EXPORT_CHROMIUM 備援）；USER_GUIDE 補「怎麼印」；本紀錄。
+- **測試**：`tests/test_docs.py`（core/docs 不得 import streamlit + 各 build_doc headless 可渲染 + 月報包 zip + 年度發稿明細單一工作表）；全套 `pytest -q` = **72 passed（+2 慢速 PDF/pack 測試）、零回歸**。
+- **欄位/數字說明**：同期＝去年同段月份、集團/淨利定義、佔比/累計/前 3 大依賴度/低毛利/認定業績/三層毛利率、帳列未收 caveat 等一律進 `Col.help` + note。
+- **樣本**：`samples/` 與 `pack/` 進 `.gitignore`（含真實客戶資料，`tools/export_sample_reference.py` 可重跑）。

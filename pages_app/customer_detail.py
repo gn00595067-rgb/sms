@@ -61,7 +61,10 @@ st.session_state["customer_focus"] = customer
 txn = query_df(
     "select distinct perf_ym from v_deal_summary where customer=%s and not is_barter and ext_net>0 order by perf_ym",
     (customer,))
-txn_months = txn["perf_ym"].tolist() if not txn.empty else []
+_all_months = txn["perf_ym"].tolist() if not txn.empty else []
+# 「最近一次交易」只看 ≤ 截止月的已實際發生月份；未來預登單另計（避免顯示「距今 -N 個月」）
+txn_months = [m for m in _all_months if m <= yt]
+future_months = [m for m in _all_months if m > yt]
 last_txn = txn_months[-1] if txn_months else None
 months_since = ((ao["as_of_year"] - last_txn.year) * 12 + (ao["as_of_month"] - last_txn.month)) if last_txn else None
 avg_gap = None
@@ -94,9 +97,10 @@ A.kpi_row([
     {"label": "歷年累計", "value": money(all_net),
      "sub": f"帳上毛利 {money(all_bp)}（{pct(all_bp/all_net) if all_net else '–'}）"},
     {"label": "最近一次交易", "value": (ym_text(last_txn) if last_txn else "—"),
-     "sub": (f"距今 {months_since} 個月" if months_since is not None else "")},
+     "sub": (f"距今 {months_since} 個月" if months_since is not None else "尚無實際交易")
+            + (f"・另有 {len(future_months)} 個月預登單" if future_months else "")},
     {"label": "平均回購間隔", "value": (f"{avg_gap:.1f} 個月" if avg_gap is not None else "—"),
-     "sub": f"歷年交易 {len(txn_months)} 個月"},
+     "sub": f"歷年實際交易 {len(txn_months)} 個月"},
 ])
 
 st.divider()
