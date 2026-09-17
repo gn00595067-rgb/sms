@@ -22,7 +22,7 @@ user = require_role("MEDIA", "FINANCE", "EXEC", "SALES")
 is_exec = user["role"] == "EXEC"
 page_header("👥 客戶分析", "誰在養公司、依賴多高、哪個產業在長、誰快掉了。")
 
-f = A.filter_bar_analysis("acust", user=user, show_scope=True)
+f = A.filter_bar_analysis("acust", user=user)   # 固定分析口徑（詳細版）；發稿口徑見報表中心的老闆版報表
 scope = f["scope"]
 
 # 發稿口徑 / 自訂口徑：改用線層彙總的聚焦排名（避免與分析口徑互動圖表混口徑）

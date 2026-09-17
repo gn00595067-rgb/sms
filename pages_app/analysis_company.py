@@ -17,7 +17,7 @@ from reports import export as X
 user = require_role("MEDIA", "FINANCE", "EXEC")
 page_header("🏛️ 公司分析", "三層毛利橋：帳上 → 集團 → 淨利；目標達成用老闆儀表板口徑。")
 
-f = A.filter_bar_analysis("aco", user=user, show_industry=False, show_salesperson=False, show_scope=True)
+f = A.filter_bar_analysis("aco", user=user, show_industry=False, show_salesperson=False)   # 固定分析口徑（詳細版）
 
 # 平台總覽的兩個互動選單（在 Doc 之外先讀好值，改了就重組 Doc；§1.3）
 oc = st.columns([3, 2])

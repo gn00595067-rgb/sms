@@ -17,7 +17,7 @@ from reports import export as X
 user = require_role("MEDIA", "FINANCE", "EXEC", "SALES")
 page_header("🧑‍💼 業務分析", "量與質並列：金額、佔比是量，毛利率、新客、依賴度是質。")
 
-f = A.filter_bar_analysis("asp", user=user, show_salesperson=False, show_scope=True)
+f = A.filter_bar_analysis("asp", user=user, show_salesperson=False)   # 固定分析口徑（詳細版）
 scope = f["scope"]
 
 # 發稿口徑 / 自訂口徑：改用線層彙總的聚焦排名（避免與分析口徑圖表混口徑）
