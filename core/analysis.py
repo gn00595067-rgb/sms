@@ -145,6 +145,130 @@ def load_deals(ym_from: date, ym_to: date, filters: dict | None = None,
     return df
 
 
+# ------------------------------------------------------------------ 口徑（scope）與線層載入（階段 K / TASK_4 §3.5）
+# 老闆報表平台的固定欄序
+REPORT_PLATFORM_ORDER = ["全家企頻", "萬家福", "新鮮視", "廣播", "健康視", "營運", "其它"]
+OWN_MEDIA = ["全家企頻", "萬家福", "新鮮視", "健康視"]          # 自媒體（不含廣播）
+MEDIA_PLATFORMS = ["全家企頻", "萬家福", "新鮮視", "廣播", "健康視"]  # 老闆四欄 + 健康視
+
+# 三個口徑的預設旗標（自訂＝可逐項覆寫）
+SCOPE_PRESETS: dict[str, dict] = {
+    # 分析口徑（現狀、預設）：全部對外線（含製作收入）、全部平台、排除交換、含公司戶、不含轉撥
+    "analysis": dict(include_production=True, include_barter=False, include_house=True,
+                     include_ops_other=True, merge_ruidi=False),
+    # 發稿口徑（老闆版）：只 MEDIA、四平台+健康視、含交換（併回原業務）、含公司戶、不含轉撥
+    "media": dict(include_production=False, include_barter=True, include_house=True,
+                  include_ops_other=False, merge_ruidi=False),
+    # 自訂：預設同發稿口徑，再讓使用者逐項勾
+    "custom": dict(include_production=False, include_barter=True, include_house=True,
+                   include_ops_other=False, merge_ruidi=False),
+}
+
+
+def resolve_scope(scope: dict | str | None) -> dict:
+    """把 scope（preset 字串或 dict）正規化成含五個旗標 + preset 的 dict。"""
+    if isinstance(scope, str):
+        scope = {"preset": scope}
+    scope = scope or {}
+    preset = scope.get("preset", "analysis")
+    out = dict(SCOPE_PRESETS.get(preset, SCOPE_PRESETS["analysis"]))
+    for k, v in scope.items():
+        if k != "preset":
+            out[k] = v
+    out["preset"] = preset
+    return out
+
+
+def _scope_where(scope: dict) -> list[str]:
+    """由 scope 旗標組出 v_report_line 的 where 片段（轉撥線一律不含）。"""
+    s = resolve_scope(scope)
+    where = ["not is_intercompany"]
+    if not s["include_production"]:
+        where.append("line_type <> 'PRODUCTION'")
+    if not s["include_ops_other"]:
+        where.append("report_platform not in ('營運','其它')")
+    if not s["include_barter"]:
+        where.append("not is_barter")
+    if not s["include_house"]:
+        where.append("not is_house")
+    return where
+
+
+# 線層 Python 端要轉 float 的數值欄
+_LINE_NUM = ["net_amount", "cost_amount", "booked_profit", "gross_amount",
+             "recognized_amount", "total_seconds", "purchased_slots"]
+
+
+@st.cache_data(ttl=60)
+def load_lines(ym_from: date, ym_to: date, scope: dict | str | None = None,
+               filters: dict | None = None, user: dict | None = None) -> pd.DataFrame:
+    """
+    v_report_line 期間切片（一列 = 一條發稿線），依 scope 過濾。交換併回原業務（salesperson_merged）。
+    合約層才有的欄位（group_profit / net_profit / size_bucket / is_low_margin）需要時用 deal_id
+    從 v_deal_summary 併回，這裡只給線層原生欄。
+    """
+    filters = filters or {}
+    where = ["perf_ym between %s and %s"] + _scope_where(scope)
+    params: list = [ym_from, ym_to]
+    if filters.get("company"):
+        where.append("company = %s"); params.append(filters["company"])
+    if filters.get("report_platform"):
+        where.append("report_platform = %s"); params.append(filters["report_platform"])
+    if filters.get("platform_group"):
+        where.append("platform_group = %s"); params.append(filters["platform_group"])
+    if filters.get("industry"):
+        where.append("industry = %s"); params.append(filters["industry"])
+    if filters.get("salesperson"):
+        where.append("salesperson_merged = %s"); params.append(filters["salesperson"])
+    if filters.get("customer"):
+        where.append("customer ilike %s"); params.append(f"%{filters['customer']}%")
+    # SALES 只能看自己（用併回後的業務名）
+    sc = sales_scope_name(user)
+    if sc is not None:
+        if sc == "":
+            where.append("false")
+        else:
+            where.append("salesperson_merged = %s"); params.append(sc)
+    df = _df(f"select * from v_report_line where {' and '.join(where)}", params)
+    if df.empty:
+        return df
+    for c in _LINE_NUM:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0).astype(float)
+    if resolve_scope(scope)["merge_ruidi"] and "company" in df.columns:
+        df["company"] = df["company"].replace({"瑞迪": "東吳"})
+    return df
+
+
+def scope_bridge(ym_from: date, ym_to: date) -> list[tuple[str, float]]:
+    """
+    分析口徑（線層、排除交換、全部線）→ 發稿口徑 的橋，回傳 [(標籤, 金額), …]，
+    最後一項是「發稿口徑」總額。用來回答老闆「為什麼你的數字跟我的不一樣」。
+    """
+    rows = _df(
+        """select
+             sum(net_amount) filter (where not is_intercompany and not is_barter)                          as analysis,
+             sum(net_amount) filter (where not is_intercompany and not is_barter and line_type='PRODUCTION') as prod,
+             sum(net_amount) filter (where not is_intercompany and not is_barter and line_type='MEDIA' and report_platform='營運') as ops,
+             sum(net_amount) filter (where not is_intercompany and not is_barter and line_type='MEDIA' and report_platform='其它') as other,
+             sum(net_amount) filter (where is_barter and in_media_scope)                                    as barter_media,
+             sum(net_amount) filter (where in_media_scope)                                                  as media
+           from v_report_line where perf_ym between %s and %s""",
+        (ym_from, ym_to))
+    if rows.empty:
+        return []
+    r = rows.iloc[0]
+    f = lambda v: float(v or 0)
+    return [
+        ("分析口徑（線層、排除交換）", f(r["analysis"])),
+        ("− 製作收入線", -f(r["prod"])),
+        ("− 營運（企頻年度維運）", -f(r["ops"])),
+        ("− 其它平台", -f(r["other"])),
+        ("＋ 交換（媒體線，併回業績）", f(r["barter_media"])),
+        ("＝ 發稿口徑", f(r["media"])),
+    ]
+
+
 def open_month() -> dict | None:
     """本月（進行中）概況：perf_ym / deals / ext_net / last_entry。無資料回 None。"""
     df = _df("select perf_ym, deals, ext_net, last_entry from v_open_month")

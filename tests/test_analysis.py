@@ -215,6 +215,39 @@ def test_boss_workbook_2025():
     assert abs(rp["廣播"] - 3_317_243) <= 1
 
 
+# ------------------------------------------------------------------ 階段 K：口徑（scope）與線層載入
+@requires_db
+def test_load_lines_media_scope_matches_boss():
+    """發稿口徑（media preset）線層總額 = 老闆工作簿 2025 合計。"""
+    from core import analysis as A
+    df = A.load_lines(date(2025, 1, 1), date(2025, 12, 1), scope="media")
+    assert abs(float(df["net_amount"].sum()) - 134_303_021) <= 1
+    assert df["customer_id"].nunique() == 265
+    # 交換已併回原業務：salesperson_merged 不應有「換」尾
+    assert not df["salesperson_merged"].fillna("").str.endswith("換").any()
+
+
+@requires_db
+def test_scope_bridge_reconciles():
+    """分析口徑 → 發稿口徑 的橋一定收斂，且終點 = 134,303,021。"""
+    from core import analysis as A
+    bridge = A.scope_bridge(date(2025, 1, 1), date(2025, 12, 1))
+    assert bridge, "bridge 不應為空"
+    *steps, last = bridge
+    assert last[0].startswith("＝ 發稿口徑")
+    assert abs(last[1] - 134_303_021) <= 1
+    assert abs(sum(v for _, v in steps) - last[1]) <= 1   # 各步驟加總 = 發稿口徑
+
+
+@requires_db
+def test_load_lines_merge_ruidi():
+    """自訂口徑 merge_ruidi=True 時，瑞迪併入東吳。"""
+    from core import analysis as A
+    df = A.load_lines(date(2025, 1, 1), date(2025, 12, 1),
+                      scope={"preset": "media", "merge_ruidi": True})
+    assert "瑞迪" not in set(df["company"])
+
+
 # ------------------------------------------------------------------ 純函式（免 DB）：毛利率分段
 def test_margin_band_boundaries():
     from core.analysis import margin_band
