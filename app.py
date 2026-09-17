@@ -38,12 +38,12 @@ PAGES = {
     "account":     ("pages_app/account.py",     "修改密碼",    "🔑", ["MEDIA", "FINANCE", "EXEC", "SALES"]),
 }
 
-# 導覽分組
+# 導覽分組（「分析」放最頂）
 GROUPS = {
-    "業務作業": ["home", "deal_entry", "deal_search", "customers"],
-    "財務": ["invoices"],
     "分析": ["boss_workbook", "analysis_customer", "analysis_salesperson", "analysis_sales", "analysis_company",
              "customer_detail", "salesperson_detail"],
+    "業務作業": ["home", "deal_entry", "deal_search", "customers"],
+    "財務": ["invoices"],
     "報表": ["reports", "report_builder", "bonus"],
     "管理": ["masters", "feedback", "audit", "users"],
     "帳號": ["account"],
@@ -84,7 +84,8 @@ def _build_pages(role: str, must_change: bool) -> list:
         return [st.Page(f, title=title, icon=icon, default=True)]
     # 本階段測試：只顯示「分析」頁群（見 core/uimode.py）
     groups = {"分析": GROUPS["分析"]} if ANALYSIS_ONLY else GROUPS
-    default_key = "analysis_customer" if ANALYSIS_ONLY else "home"
+    # 登入後預設落在最頂的「分析」群組第一頁；該頁對此角色不可見時 st.navigation 自動用第一頁
+    default_key = "analysis_customer" if ANALYSIS_ONLY else "boss_workbook"
     grouped = {}
     for group, keys in groups.items():
         pages = []
