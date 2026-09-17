@@ -201,8 +201,8 @@ st.markdown("**平台總計總覽**（公司 × 報表平台；老闆四欄 + �
 oc = st.columns([3, 2])
 metric = oc[0].radio("指標", ["除佣實收", "成本", "帳上毛利", "帳上利率", "集團毛利", "集團利率"],
                      horizontal=True, key="co_metric")
-prange = oc[1].segmented_control("平台範圍", ["全部", "自媒體（不含廣播）", "只看廣播"],
-                                 default="全部", key="co_prange")
+prange = oc[1].radio("平台範圍", ["全部", "自媒體（不含廣播）", "只看廣播"],
+                     horizontal=True, key="co_prange")
 if lines.empty:
     st.info("查無資料")
 else:

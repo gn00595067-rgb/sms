@@ -855,9 +855,10 @@ def scope_bar(key: str) -> dict:
     口徑切換元件（TASK_4 §3.5）：分析口徑 / 發稿口徑（老闆版）/ 自訂。
     回傳 resolve_scope 後的 dict（含五個旗標與 preset）。自訂展開五個勾選。
     """
-    label = st.segmented_control(
-        "口徑", ["分析口徑", "發稿口徑（老闆版）", "自訂"],
-        default="分析口徑", key=f"{key}_scope", help=(
+    # 用 st.radio（各版本皆有；st.segmented_control 需 1.40+，Streamlit Cloud 版本會飄）
+    label = st.radio(
+        "口徑", ["分析口徑", "發稿口徑（老闆版）", "自訂"], horizontal=True,
+        key=f"{key}_scope", help=(
             "分析口徑＝全部對外線、排除交換（系統預設）；"
             "發稿口徑＝老闆年度表：只算媒體上稿線、四平台+健康視、交換併回原業務；"
             "自訂＝自己勾。轉撥線一律不算。"))
