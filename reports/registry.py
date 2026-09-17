@@ -227,6 +227,25 @@ REPORTS: dict[str, dict] = {
         "roles": ["MEDIA", "FINANCE", "EXEC"],
         "sales_scope": False,
     },
+    # ---- 老闆版報表（階段 L；custom 模式：查詢與輸出交給指定模組）----
+    "annual_detail": {
+        "title": "年度發稿明細（喬商版型）",
+        "mode": "custom",
+        "module": "reports.annual_detail",
+        "roles": ["MEDIA", "FINANCE", "EXEC"],
+        "sales_scope": False,
+        "note": "版型比照 喬商_彥星年度發稿明細；一家公司一個工作表；口徑＝發稿口徑（老闆版）。"
+                "三段：各業務發稿總計 / 各業務每客戶（分平台）/ 逐筆明細。",
+    },
+    "platform_overview": {
+        "title": "平台總計總覽（老闆版 Excel）",
+        "mode": "custom",
+        "module": "reports.platform_overview",
+        "roles": ["MEDIA", "FINANCE", "EXEC"],
+        "sales_scope": False,
+        "note": "老闆工作簿「平台總計總覽」八區塊（除佣／成本／毛利／利率 × 含廣播／不含廣播）"
+                "＋集團毛利＋客戶數；口徑＝發稿口徑。畫面同公司分析平台總覽，此處提供一鍵匯出。",
+    },
     "booked_vs_forecast": {
         "title": "進單＋預估（公司 × 月）",
         "view": "v_booked_vs_forecast",

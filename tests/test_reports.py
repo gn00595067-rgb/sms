@@ -29,8 +29,9 @@ def _filters_for(key: str) -> dict:
 
 
 @requires_db
-@pytest.mark.parametrize("key", list(REPORTS.keys()))
+@pytest.mark.parametrize("key", [k for k, v in REPORTS.items() if v.get("mode") != "custom"])
 def test_report_runs_and_exports(key):
+    # custom 模式報表（老闆版）走自己的模組與 UI，於 tests/test_boss_reports.py 驗收
     r = REPORTS[key]
     filters = _filters_for(key)
     group_label = None

@@ -26,6 +26,13 @@ r = report(key)
 if r.get("note"):
     st.info(r["note"])
 
+# custom 模式（階段 L 老闆版報表）：查詢與輸出交給指定模組，走自己的 UI
+if r.get("mode") == "custom":
+    import importlib
+    importlib.import_module(r["module"]).render(user)
+    feedback_widget("reports")
+    st.stop()
+
 filters = filters_bar(r["filters"], key_prefix=key)
 
 # customer_rank 需要 perf_year（不在 filters_bar 內）
