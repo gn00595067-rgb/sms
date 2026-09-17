@@ -18,6 +18,7 @@ from core.format import COLORS, company_color, money, pct, ym_text
 from reports import export as X
 
 from ._base import header, open_month_note
+from .glossary import annotate
 
 _MAIN = ("聲活", "東吳", "鉑霖")
 
@@ -149,4 +150,4 @@ def build_doc(f: dict, user: dict | None = None) -> X.Doc:
     doc.text("低毛利＝帳上毛利率<16% 的大單（可能報價偏低）；**帳列未收**＝發票未收金額合計，"
              "但舊資料的銷帳（收款）多半沒登錄，故此數字偏高、僅供參考，需以實際收款為準；"
              "流失＝該年度狀態為「流失」的客戶。", "note")
-    return doc
+    return annotate(doc)

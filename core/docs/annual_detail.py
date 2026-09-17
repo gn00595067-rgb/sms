@@ -15,6 +15,7 @@ from reports import annual_detail as AD
 from reports import export as X
 
 from ._base import header
+from .glossary import annotate
 
 _PLAT_HELP = "報表平台：全家企頻／萬家福／新鮮視／廣播／健康視（發稿口徑五欄）"
 
@@ -38,7 +39,7 @@ def build_doc(f: dict, user: dict | None = None, *, company: str) -> X.Doc:
     doc.filter_text = f"公司={company}　{year} 全年"
     if df.empty:
         doc.text(f"{company} {year} 查無資料。", "callout")
-        return doc
+        return annotate(doc)
     plats = AD._present_platforms(df)
     ctot = float(df["net_amount"].sum())
 
@@ -79,4 +80,4 @@ def build_doc(f: dict, user: dict | None = None, *, company: str) -> X.Doc:
               "帳上毛利": tl.get("帳上毛利"), **{p: tl.get(p) for p in plats}}
     doc.table("逐筆明細", s3, cols3, totals=tl_tot, wide=True, max_rows_pdf=400,
               note="末列為除佣實收總計與各平台小計；完整逐筆請用 Excel。")
-    return doc
+    return annotate(doc)

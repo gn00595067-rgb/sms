@@ -16,6 +16,7 @@ from core.format import COLORS, money, pct, wan
 from reports import export as X
 
 from ._base import EXT_NET, SAME_PERIOD, header, open_month_note
+from .glossary import annotate
 
 _LOW_MARGIN = "低毛利＝帳上毛利率 < 16%（可能報價偏低或成本偏高，需檢視）"
 
@@ -29,7 +30,7 @@ def build_doc(f: dict, user: dict | None = None, *, sort_opt: str = "除佣實�
     d_all = A.load_deals(yf, yt, f, exclude_barter=f["exclude_barter"], user=user)
     if d_all.empty:
         doc.text("此條件查無資料。", "callout")
-        return doc
+        return annotate(doc)
     d = d_all[d_all["ext_net"] > 0].copy()
     zero = d_all[d_all["ext_net"] <= 0].copy()
     dp = A.load_deals(pf, pt, f, exclude_barter=f["exclude_barter"], user=user)
@@ -126,4 +127,4 @@ def build_doc(f: dict, user: dict | None = None, *, sort_opt: str = "除佣實�
     else:
         doc.text("此條件下無低毛利訂單。", "note")
 
-    return doc
+    return annotate(doc)

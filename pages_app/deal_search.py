@@ -73,6 +73,8 @@ if df is not None and not df.empty:
     doc = compat.record_doc("業績查詢", filter_text="　".join(_fp), user=user, orientation="landscape")
     compat.add_table(doc, "業績查詢", df, columns=[c for c in cols if c in df.columns], wide=True,
                      max_rows_pdf=300, note="完整清單（可超過 300 筆）請用 Excel。金額單位：元。")
+    from core.docs.glossary import annotate
+    annotate(doc)
     X.ui.export_bar(doc, key="ds")
 
 feedback_widget("deal_search")

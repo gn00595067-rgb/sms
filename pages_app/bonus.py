@@ -54,6 +54,8 @@ else:
                             "threshold_amount": "達到才計獎金的門檻"})
     if sub is not None and not sub.empty:
         compat.add_table(doc, "業務小計", sub, sheet_name="業務小計", note="每位業務的業績、毛利、獎金合計。")
+    from core.docs.glossary import annotate
+    annotate(doc)
     X.ui.export_bar(doc, key="bonus")
 
 st.page_link("pages_app/masters.py", label="→ 到「主檔維護」設定獎金規則", icon="🗂️")

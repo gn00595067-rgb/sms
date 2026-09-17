@@ -19,6 +19,7 @@ from reports import export as X
 from reports.export.theme import COMPANY, PLATFORM
 
 from ._base import GROUP_MARGIN, NET_PROFIT, SAME_PERIOD, header, open_month_note
+from .glossary import annotate
 
 _MAIN = ("聲活", "東吳", "鉑霖")
 _MEDIA_FONT = dict(family="Noto Sans TC, Microsoft JhengHei")
@@ -270,4 +271,4 @@ def build_doc(f: dict, user: dict | None = None, *, metric: str = "除佣實收"
                   wide=True, freeze_cols=2, max_cols_pdf=16,
                   note="單位：萬元（非元）。進單＝期間內已成立的除佣實收；預估需在主檔維護 → 預估 輸入後才出現。")
 
-    return doc
+    return annotate(doc)

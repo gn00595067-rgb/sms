@@ -18,6 +18,7 @@ from core.format import COLORS, money, pct, ym_text
 from reports import export as X
 
 from ._base import EXT_NET, SAME_PERIOD, header
+from .glossary import annotate
 
 
 def build_doc(f: dict | None = None, user: dict | None = None, *, customer: str) -> X.Doc:
@@ -162,4 +163,4 @@ def build_doc(f: dict | None = None, user: dict | None = None, *, customer: str)
             X.Col("net_margin", "淨利率", "pct", help="再扣固定成本後的淨利率")),
             wide=True, max_rows_pdf=300, note="三層毛利率：帳上（自認）→ 集團（轉撥加回）→ 淨利（再扣固定成本）。")
 
-    return doc
+    return annotate(doc)

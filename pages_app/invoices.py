@@ -60,6 +60,8 @@ with tab_ar:
                          helps={"overdue_days": "距應交付日已逾期幾天（>0 才逾期）",
                                 "outstanding_amount": "帳款金額 − 已收金額", "amount_total": "應收帳款總額"},
                          note="逾期（overdue_days>0）以紅色左邊條標示；未收金額＝帳款 − 已收。金額單位：元。")
+        from core.docs.glossary import annotate
+        annotate(doc)
         X.ui.export_bar(doc, key="ar")
 
 # --------------------------------------------------------------- 發票編輯

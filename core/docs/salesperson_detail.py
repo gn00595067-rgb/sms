@@ -17,6 +17,7 @@ from core.format import COLORS, money, pct, ym_text
 from reports import export as X
 
 from ._base import EXT_NET, SAME_PERIOD, SHARE, header
+from .glossary import annotate
 
 
 def build_doc(f: dict | None = None, user: dict | None = None, *, salesperson: str) -> X.Doc:
@@ -135,4 +136,4 @@ def build_doc(f: dict | None = None, user: dict | None = None, *, salesperson: s
             X.Col("prob_ratio", "機率%", "pct", help="成交機率（業務自評）")),
             sheet_name="預估pipeline", note="預估＝OPEN 狀態、尚未成立的 pipeline；成交機率為業務自評。")
 
-    return doc
+    return annotate(doc)

@@ -13,6 +13,7 @@ from core.format import money, pct
 from reports import export as X
 
 from ._base import EXT_NET, SAME_PERIOD, SHARE, header, open_month_note
+from .glossary import annotate
 
 
 def _scope_preset(f: dict) -> str:
@@ -33,7 +34,7 @@ def build_doc(f: dict, user: dict | None = None) -> X.Doc:
         spl = A.agg_salespeople_lines(A.load_lines(yf, yt, scope, f, user), A.load_lines(pf, pt, scope, f, user))
         if spl.empty:
             doc.text("此條件查無資料。", "callout")
-            return doc
+            return annotate(doc)
         nonh = spl[~spl["is_house"]]
         tot = float(nonh["ext_net"].sum())
         doc.kpis([
@@ -58,13 +59,13 @@ def build_doc(f: dict, user: dict | None = None) -> X.Doc:
                 ("salesperson", "業務", "text"), ("main_company", "公司", "text"),
                 ("ext_net", "除佣實收", "money"), ("booked_profit", "帳上毛利", "money")),
                 note="公司戶＝掛在公司名下（非個人業務）的訂單，不參與業務排名。")
-        return doc
+        return annotate(doc)
 
     # ---- 分析口徑：完整版 ----
     dw = A.load_deals(yf, yt, f, exclude_barter=f["exclude_barter"], user=user)
     if dw.empty:
         doc.text("此條件查無資料。", "callout")
-        return doc
+        return annotate(doc)
     dp = A.load_deals(pf, pt, f, exclude_barter=f["exclude_barter"], user=user)
     cust = A.agg_customers(dw, dp, A.customer_year(yf.year))
     sp = A.agg_salespeople(dw, dp, A.new_customers_by_salesperson(cust), A.load_barter_by("salesperson", yf, yt))
@@ -145,4 +146,4 @@ def build_doc(f: dict, user: dict | None = None) -> X.Doc:
                   note="數字為除佣實收（對外、已排除內部轉撥" + ("、排除交換" if f["exclude_barter"] else "") +
                        "）；欄依總額由大到小；報表平台＝老闆四欄＋健康視。")
 
-    return doc
+    return annotate(doc)

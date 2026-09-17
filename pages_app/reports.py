@@ -102,6 +102,8 @@ if st.session_state.get(f"{key}_run"):
                                 orientation="landscape")
         compat.add_table(doc, r["title"], df, columns=cols, totals=tot or None,
                          note="金額單位：元；比率＝Σ分子÷Σ分母。")
+        from core.docs.glossary import annotate
+        annotate(doc)
         X.ui.export_bar(doc, key=key)
 
 feedback_widget("reports")

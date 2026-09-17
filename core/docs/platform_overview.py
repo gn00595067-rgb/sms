@@ -11,6 +11,7 @@ from reports import export as X
 from reports import platform_overview as PO
 
 from ._base import header
+from .glossary import annotate
 
 
 def build_doc(f: dict, user: dict | None = None) -> X.Doc:
@@ -27,7 +28,7 @@ def build_doc(f: dict, user: dict | None = None) -> X.Doc:
     doc.filter_text = f"{year} 全年・發稿口徑"
     if df.empty:
         doc.text(f"{year} 查無資料。", "callout")
-        return doc
+        return annotate(doc)
 
     for title, metric, own in PO.BLOCKS:
         blk = PO._block(df, metric, own)
@@ -43,4 +44,4 @@ def build_doc(f: dict, user: dict | None = None) -> X.Doc:
         doc.table(title, body, cols, totals=tot)
     doc.text("利率＝Σ帳上毛利 ÷ Σ除佣實收（非各平台平均）；客戶數為不重複；"
              "不含廣播＝只算自媒體（全家企頻／萬家福／新鮮視／健康視）。", "note")
-    return doc
+    return annotate(doc)

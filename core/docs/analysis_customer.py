@@ -17,6 +17,7 @@ from core.format import COLORS, money, pct, status_color, wan
 from reports import export as X
 
 from ._base import CUM, EXT_NET, SAME_PERIOD, SHARE, header, open_month_note
+from .glossary import annotate
 
 
 def _scope_preset(f: dict) -> str:
@@ -37,7 +38,7 @@ def build_doc(f: dict, user: dict | None = None) -> X.Doc:
         cl = A.agg_customers_lines(A.load_lines(yf, yt, scope, f, user), A.load_lines(pf, pt, scope, f, user))
         if cl.empty:
             doc.text("此條件查無資料。", "callout")
-            return doc
+            return annotate(doc)
         tot = float(cl["ext_net"].sum())
         doc.kpis([
             {"label": "活躍客戶數", "value": f"{len(cl)}"},
@@ -57,13 +58,13 @@ def build_doc(f: dict, user: dict | None = None) -> X.Doc:
             ("booked_profit", "帳上毛利", "money"), ("booked_margin", "毛利率", "pct"),
             X.Col("yoy_text", "同期%", "text", help=SAME_PERIOD)),
             wide=True, note=f"{SAME_PERIOD}；佔比分母＝期間客戶合計。")
-        return doc
+        return annotate(doc)
 
     # ---- 分析口徑：完整版 ----
     dw = A.load_deals(yf, yt, f, exclude_barter=f["exclude_barter"], user=user)
     if dw.empty:
         doc.text("此條件查無資料。", "callout")
-        return doc
+        return annotate(doc)
     dp = A.load_deals(pf, pt, f, exclude_barter=f["exclude_barter"], user=user)
     cust = A.agg_customers(dw, dp, A.customer_year(yf.year))
     total = float(cust["ext_net"].sum())
@@ -192,4 +193,4 @@ def build_doc(f: dict, user: dict | None = None) -> X.Doc:
     else:
         doc.text("此門檻下無流失風險客戶。", "note")
 
-    return doc
+    return annotate(doc)
