@@ -281,3 +281,12 @@ def render(user: dict | None = None) -> None:
                        file_name=f"年度發稿明細_{year}.xlsx",
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                        use_container_width=True)
+
+    # 列印級 PDF / 單一工作表 Excel（每家一份，走匯出層）
+    from reports import export as X
+    from core.docs.annual_detail import build_doc as _ad_doc
+    _f = {"ym_from": date(year, 1, 1), "ym_to": date(year, 12, 1), "scope": "media"}
+    st.divider()
+    st.caption("列印版（PDF）／單一工作表 Excel — 每家一份：")
+    _co = st.selectbox("選公司產列印版", companies, key="ad_pdf_co")
+    X.ui.export_bar(_ad_doc(_f, user, company=_co), key=f"ad_{_co}")

@@ -101,6 +101,7 @@ class Doc:
     as_of_note: str | None = None       # 「2026/09 進行中，未納入」
     blocks: list[Block] = field(default_factory=list)
     footer_note: str = "數字口徑見各表下方說明；金額單位：元（圖表軸：萬）。"
+    xlsx_layout: Literal["sheets", "single"] = "sheets"   # single = 全部表寫同一張工作表（年度發稿明細）
 
     # ---- 記錄用的便利方法（頁面呼叫）----
     def add(self, block: Block) -> "Doc":

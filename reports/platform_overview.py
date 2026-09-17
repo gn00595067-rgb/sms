@@ -174,3 +174,9 @@ def render(user: dict | None = None) -> None:
                        file_name=f"平台總計總覽_{year}.xlsx",
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                        use_container_width=True)
+
+    from reports import export as X
+    from core.docs.platform_overview import build_doc as _po_doc
+    _f = {"ym_from": date(year, 1, 1), "ym_to": date(year, 12, 1), "scope": "media"}
+    st.divider()
+    X.ui.export_bar(_po_doc(_f, user), key="po_export")

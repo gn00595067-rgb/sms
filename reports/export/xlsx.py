@@ -368,11 +368,80 @@ def _chart_sheet(wb: Workbook, doc: Doc, charts: list[Chart]) -> str | None:
     return ws.title
 
 
+def _single_sheet(wb: Workbook, doc: Doc) -> None:
+    """所有 Heading／Table 依序寫在同一張工作表（年度發稿明細：三段往下排）。"""
+    ws = wb.active
+    ws.title = _sheet_name(wb, doc.title)
+    ws.cell(1, 1, doc.title).font = X_TITLE
+    parts = [p for p in (doc.period_text, doc.scope_text, doc.filter_text) if p]
+    sub = "　".join(parts) + f"　產出：{(doc.generated_by + ' ') if doc.generated_by else ''}{doc.generated_at:%Y/%m/%d %H:%M}"
+    ws.cell(2, 1, sub).font = X_SUB
+    r = 4
+    first_hdr = None
+    maxcol = 1
+    for b in doc.blocks:
+        if isinstance(b, Heading):
+            ws.cell(r, 1, b.text).font = X_BOLD if b.level >= 3 else X_HEAD
+            r += 1
+        elif isinstance(b, Text):
+            c = ws.cell(r, 1, b.text.replace("**", ""))
+            c.font = X_SUB if b.style == "note" else X_BASE
+            r += 1
+        elif isinstance(b, Table):
+            df = b.df if b.df is not None else pd.DataFrame()
+            cols = [c for c in b.columns if c.key in df.columns] if not df.empty else list(b.columns)
+            maxcol = max(maxcol, len(cols))
+            if b.title:
+                ws.cell(r, 1, b.title).font = X_BOLD
+                r += 1
+            hdr = r
+            if first_hdr is None:
+                first_hdr = hdr
+            for j, c in enumerate(cols, start=1):
+                cell = ws.cell(hdr, j, c.label)
+                cell.font, cell.fill, cell.border, cell.alignment = X_HEAD, X_HEAD_FILL, X_HEAD_BORDER, X_CENTER
+            r = hdr + 1
+            for i, (_, row) in enumerate(df.iterrows()):
+                rc = b.row_class(row) if b.row_class else None
+                for j, c in enumerate(cols, start=1):
+                    cell = ws.cell(r, j)
+                    _write_value(cell, row[c.key], c.kind)
+                    cell.font = X_MUTED if rc == "muted" else X_BASE
+                    cell.border = X_CELL_BORDER
+                    if i % 2 == 1:
+                        cell.fill = X_ZEBRA_FILL
+                r += 1
+            if b.totals:
+                has_label = any(c.kind == "text" and b.totals.get(c.key) is not None for c in cols)
+                for j, c in enumerate(cols, start=1):
+                    cell = ws.cell(r, j)
+                    v = b.totals.get(c.key)
+                    if j == 1 and (v is None or c.kind == "text"):
+                        cell.value = str(v) if v is not None else ("" if has_label else "合計")
+                    elif v is not None:
+                        _write_value(cell, v, "pct" if c.kind == "progress" else c.kind)
+                    cell.font, cell.border = X_BOLD, X_TOTAL_BORDER
+                r += 1
+            if b.note:
+                ws.cell(r, 1, b.note).font = X_SUB
+                r += 1
+            r += 2   # 段落間空兩列
+    for j in range(1, maxcol + 1):
+        ws.column_dimensions[get_column_letter(j)].width = 14
+    ws.freeze_panes = ws.cell((first_hdr or 4) + 1, 1)
+    _print_setup(ws, orientation="landscape", title=doc.title, period=doc.period_text,
+                 who=f"產出：{doc.generated_by} {doc.generated_at:%Y/%m/%d %H:%M}",
+                 header_rows=f"{first_hdr}:{first_hdr}" if first_hdr else None)
+
+
 def to_xlsx(doc: Doc) -> bytes:
     wb = Workbook()
-    table_sheets = [(t.title, _table_sheet(wb, doc, t)) for t in doc.tables()]
-    chart_sheet = _chart_sheet(wb, doc, doc.charts())
-    _summary_sheet(wb, doc, table_sheets, chart_sheet)
+    if getattr(doc, "xlsx_layout", "sheets") == "single":
+        _single_sheet(wb, doc)
+    else:
+        table_sheets = [(t.title, _table_sheet(wb, doc, t)) for t in doc.tables()]
+        chart_sheet = _chart_sheet(wb, doc, doc.charts())
+        _summary_sheet(wb, doc, table_sheets, chart_sheet)
     wb.active = 0
     buf = io.BytesIO()
     wb.save(buf)

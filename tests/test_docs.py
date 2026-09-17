@@ -35,9 +35,25 @@ def test_docs_do_not_import_streamlit():
         assert "streamlit" not in _imported_top_modules(p), f"{p.name} 不得 import streamlit"
 
 
-# pack 用的 build_doc(f, user) 模組（詳細頁 customer_detail/salesperson_detail 需 kwargs，另測）
+# pack 用的 build_doc(f, user) 模組（詳細頁 / annual_detail 需 kwargs，另測）
 BUILD_DOC_MODULES = ["core.docs.home", "core.docs.analysis_company", "core.docs.analysis_customer",
-                     "core.docs.analysis_salesperson", "core.docs.analysis_sales"]
+                     "core.docs.analysis_salesperson", "core.docs.analysis_sales",
+                     "core.docs.platform_overview"]
+
+
+@requires_db
+def test_annual_detail_single_sheet():
+    """年度發稿明細：build_doc(company=…) 產出、Excel 為單一工作表（xlsx_layout=single）。"""
+    import io
+    from datetime import date
+    from openpyxl import load_workbook
+    from reports import export as X
+    from core.docs.annual_detail import build_doc
+    f = {"ym_from": date(2025, 1, 1), "ym_to": date(2025, 12, 1), "scope": "media"}
+    doc = build_doc(f, {"role": "EXEC"}, company="鉑霖")
+    assert doc.xlsx_layout == "single" and len(doc.tables()) >= 3
+    wb = load_workbook(io.BytesIO(X.to_xlsx(doc)))
+    assert len(wb.sheetnames) == 1                      # 三段同一張工作表
 
 
 @requires_db
