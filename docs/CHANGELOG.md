@@ -66,3 +66,11 @@
 - **P2** 客戶價值矩陣毛利率口徑切換（EXEC 預設集團淨利率）+ 前 5 大標名；低毛利清單排除營運結構成本單（可勾回）；資料品質面板（缺產業/異常業務名/疑似異名）；客戶頁加最近交易/平均回購間隔 KPI、圖只畫有資料月份、歷年表去未來年；業務頁加同期 KPI、客戶組合空狀態；Excel 標「單位：元」。
 - **關鍵 bug**：未來預登月份（2027）混進期間選單、且 as_of 與月清單型別不一致（date vs Timestamp）→ 預設迄月落到最新月造成空視窗；已於 `analysis_months` 排除未來月並統一為 date。
 - 全套 `pytest -q` = 44 passed、零回歸；6 個分析頁經 app.py 導覽 headless 煙霧零例外。
+
+## 階段 J — 發稿口徑與報表平台（CLAUDE_CODE_TASK_4，`sql/007_report_platform.sql`）
+- **報表平台 `report_platform`**：platform 主檔加欄 + seed，把 20 個平台歸成老闆的七欄（全家企頻／萬家福／新鮮視／廣播／健康視／營運／其它）。全家分區線（全家全企/北/桃/中/南/南頻）→ 全家企頻。
+- **P0 修正**：`v_deal_summary` 的四平台欄原以 `platform_group='企頻'` 彙總，2024–2025 的全家分區線（platform_group='分區'）全掉進 `net_other`；改以 `report_platform` 彙總。`net_cp` 語意 = 企頻合計（全家企頻＋萬家福）；新增 `net_cp_family / net_cp_carrefour / net_clinic / report_platforms / main_report_platform`。例：東吳 2025 全家企頻由 0 → 2,985 萬（合約層、不含交換）。
+- **口徑旗標**：`v_line_ext` 加 `report_platform / in_media_scope（只 MEDIA、非轉撥、屬四欄+健康視）/ is_own_media（不含廣播）`。
+- **集團毛利橋收斂**：`v_group_month.ic_add_back` 改為「集團毛利 − 帳上毛利」（一定收斂），另加 `ic_transfer_gross`（轉撥收入總額明細）供瀑布圖 hover；公司/集團月表補七欄報表平台。
+- **新增 `v_report_line`**：老闆口徑的線層 view（交換併回原業務 `salesperson_merged`、走期文字 `air_period_text`、`ym`），給階段 K/L/M 用。
+- **驗收**（`tests/test_analysis.py::test_boss_workbook_2025`）：2025 發稿口徑 聲活 71,533,523／東吳 50,325,792／瑞迪 536,190／鉑霖 11,907,516；合計 134,303,021、帳上毛利 67,416,333、客戶 265；不含廣播 98,408,698／259 家；東吳+瑞迪 全家企頻 32,378,519／萬家福 5,630,860／新鮮視 9,535,360／廣播 3,317,243——全部對到元。全套 `pytest -q` = **45 passed、零回歸**。

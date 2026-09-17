@@ -34,12 +34,16 @@ def _fetch(sql, params=None):
 @requires_db
 def test_group_month_totals_match_acceptance():
     r = _fetch(
-        """select sum(ext_net) en, sum(booked_profit) bp, sum(ic_add_back) ic, sum(group_profit) gp,
-                  sum(fixed_cost) fc, sum(net_profit) np
+        """select sum(ext_net) en, sum(booked_profit) bp, sum(ic_add_back) ic, sum(ic_transfer_gross) icg,
+                  sum(group_profit) gp, sum(fixed_cost) fc, sum(net_profit) np
            from v_group_month where perf_year=2026 and perf_month<=9""")[0]
     assert abs(float(r["en"]) - 87_443_295) <= 1
     assert abs(float(r["bp"]) - 24_090_256) <= 1
-    assert abs(float(r["ic"]) - 24_681_545) <= 1
+    # 007 §2.4：集團毛利橋一定收斂（帳上毛利 + 加回 = 集團毛利）
+    assert abs(float(r["bp"]) + float(r["ic"]) - float(r["gp"])) <= 1
+    # 加回 = 集團毛利 − 帳上毛利（≈ 2,333 萬）；轉撥收入總額（明細）= 2,468 萬
+    assert abs(float(r["ic"]) - 23_331_605) <= 1
+    assert abs(float(r["icg"]) - 24_681_545) <= 1
     assert abs(float(r["gp"]) - 47_421_861) <= 1
     assert abs(float(r["fc"]) - 14_250_000) <= 1
     assert abs(float(r["np"]) - 33_171_861) <= 1
@@ -170,6 +174,45 @@ def test_top_customers_have_industry():
     top20 = cust.head(20)
     missing = top20[top20["industry"].isna() | (top20["industry"] == "(未分類)")]
     assert len(missing) == 0, f"前 20 名仍有未分類：{list(missing['customer'])}"
+
+
+# ------------------------------------------------------------------ 007 §2.6：老闆工作簿 2025 發稿口徑黃金數字
+@requires_db
+def test_boss_workbook_2025():
+    """對過老闆工作簿的固定值（發稿口徑）：ETL 重跑後仍須相等。"""
+    # 各公司除佣實收 / 成本 / 客戶數（發稿口徑，線層）
+    rows = {r["company"]: r for r in _fetch(
+        """select company, round(sum(net_amount)) net, round(sum(cost_amount)) cost,
+                  count(distinct customer_id) customers
+           from v_report_line where perf_year=2025 and in_media_scope group by 1""")}
+    assert abs(float(rows["聲活"]["net"]) - 71_533_523) <= 1
+    assert abs(float(rows["聲活"]["cost"]) - 29_157_710) <= 1
+    assert abs(float(rows["東吳"]["net"]) - 50_325_792) <= 1
+    assert abs(float(rows["瑞迪"]["net"]) - 536_190) <= 1
+    assert abs(float(rows["鉑霖"]["net"]) - 11_907_516) <= 1
+    assert abs(float(rows["鉑霖"]["cost"]) - 6_932_238) <= 1
+    # 三公司合計 + 帳上毛利 + 不重複客戶數
+    tot = _fetch(
+        """select round(sum(net_amount)) net, round(sum(net_amount)-sum(cost_amount)) profit,
+                  count(distinct customer_id) customers
+           from v_report_line where perf_year=2025 and in_media_scope""")[0]
+    assert abs(float(tot["net"]) - 134_303_021) <= 1
+    assert abs(float(tot["profit"]) - 67_416_333) <= 1
+    assert int(tot["customers"]) == 265
+    # 不含廣播（自媒體）
+    own = _fetch(
+        """select round(sum(net_amount)) net, count(distinct customer_id) customers
+           from v_report_line where perf_year=2025 and in_media_scope and is_own_media""")[0]
+    assert abs(float(own["net"]) - 98_408_698) <= 1
+    assert int(own["customers"]) == 259
+    # 東吳+瑞迪 分報表平台（= 老闆工作簿東吳列）
+    rp = {r["report_platform"]: float(r["net"]) for r in _fetch(
+        """select report_platform, round(sum(net_amount)) net from v_report_line
+           where perf_year=2025 and in_media_scope and company in ('東吳','瑞迪') group by 1""")}
+    assert abs(rp["全家企頻"] - 32_378_519) <= 1
+    assert abs(rp["萬家福"] - 5_630_860) <= 1
+    assert abs(rp["新鮮視"] - 9_535_360) <= 1
+    assert abs(rp["廣播"] - 3_317_243) <= 1
 
 
 # ------------------------------------------------------------------ 純函式（免 DB）：毛利率分段
