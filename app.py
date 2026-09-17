@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from core.auth import current_user, is_logged_in, login, logout
+from core.auth import DEV_LOGIN, current_user, dev_login, is_logged_in, login, logout
 from core.format import ROLE_LABELS
 from core.uimode import ANALYSIS_ONLY
 
@@ -52,6 +52,17 @@ GROUPS = {
 def _login_screen() -> None:
     st.title("📊 業績系統")
     st.caption("聲活 / 東吳 / 鉑霖 / 瑞迪 — 業績統計 MVP")
+    if DEV_LOGIN:   # 測試期：只需輸入密碼即可進入（見 core/auth.py DEV_LOGIN）
+        with st.form("login"):
+            password = st.text_input("密碼", type="password")
+            ok = st.form_submit_button("登入", use_container_width=True)
+        if ok:
+            if dev_login(password):
+                st.rerun()
+            else:
+                st.error("密碼錯誤")
+        st.caption("測試期：只需輸入密碼即可進入（以高階身分）。")
+        return
     with st.form("login"):
         username = st.text_input("帳號")
         password = st.text_input("密碼", type="password")

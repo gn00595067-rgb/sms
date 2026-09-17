@@ -17,6 +17,36 @@ from db import connect, transaction  # noqa: E402
 
 ROLES = ("MEDIA", "FINANCE", "EXEC", "SALES")
 
+# ⚠ 暫時方便登入（demo 用）：只輸入密碼 DEV_PASSWORD 即以高階(EXEC)身分進入、不用帳號。
+# 要恢復正式帳密登入，把 DEV_LOGIN 改回 False 即可（其餘登入程式不用動）。
+# 注意：開啟時，任何人只要有網址 + 這組密碼就能進來看／改全部資料，僅供內部測試期使用。
+DEV_LOGIN = True
+DEV_PASSWORD = "123"
+
+
+def dev_login(password: str) -> dict | None:
+    """暫時登入：密碼對就載入一個高階帳號（略過帳號輸入、密碼雜湊與強制改密碼）。"""
+    if not DEV_LOGIN or (password or "") != DEV_PASSWORD:
+        return None
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """select id, username, display_name, role, salesperson_id
+                   from app_user where is_active and role = 'EXEC'
+                   order by (username = 'boss') desc, (username = 'jonathan') desc, id
+                   limit 1""")
+            row = cur.fetchone()
+    if not row:
+        return None
+    user = {
+        "id": row["id"], "username": row["username"],
+        "display_name": row["display_name"] or row["username"],
+        "role": row["role"], "salesperson_id": row["salesperson_id"],
+        "must_change_password": False,
+    }
+    st.session_state["user"] = user
+    return user
+
 
 # ------------------------------------------------------------------ 密碼
 def hash_password(plain: str) -> str:
