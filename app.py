@@ -22,6 +22,7 @@ PAGES = {
     "customers":   ("pages_app/customers.py",   "客戶主檔",    "🏢", ["MEDIA", "FINANCE", "EXEC", "SALES"]),
     "masters":     ("pages_app/masters.py",     "主檔維護",    "🗂️", ["MEDIA", "EXEC"]),
     "invoices":    ("pages_app/invoices.py",    "發票與銷帳",  "💳", ["MEDIA", "FINANCE", "EXEC"]),
+    "boss_workbook":        ("pages_app/boss_workbook.py",        "常用分析", "⭐", ["MEDIA", "FINANCE", "EXEC"]),
     "analysis_customer":    ("pages_app/analysis_customer.py",    "客戶分析", "👥", ["MEDIA", "FINANCE", "EXEC", "SALES"]),
     "analysis_salesperson": ("pages_app/analysis_salesperson.py", "業務分析", "🧑‍💼", ["MEDIA", "FINANCE", "EXEC", "SALES"]),
     "analysis_sales":       ("pages_app/analysis_sales.py",       "銷售分析", "🧾", ["MEDIA", "FINANCE", "EXEC", "SALES"]),
@@ -41,7 +42,7 @@ PAGES = {
 GROUPS = {
     "業務作業": ["home", "deal_entry", "deal_search", "customers"],
     "財務": ["invoices"],
-    "分析": ["analysis_customer", "analysis_salesperson", "analysis_sales", "analysis_company",
+    "分析": ["boss_workbook", "analysis_customer", "analysis_salesperson", "analysis_sales", "analysis_company",
              "customer_detail", "salesperson_detail"],
     "報表": ["reports", "report_builder", "bonus"],
     "管理": ["masters", "feedback", "audit", "users"],

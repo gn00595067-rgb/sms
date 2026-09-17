@@ -113,3 +113,12 @@
 - **測試**：`tests/test_docs.py`（core/docs 不得 import streamlit + 各 build_doc headless 可渲染 + 月報包 zip + 年度發稿明細單一工作表）；全套 `pytest -q` = **72 passed（+2 慢速 PDF/pack 測試）、零回歸**。
 - **欄位/數字說明**：同期＝去年同段月份、集團/淨利定義、佔比/累計/前 3 大依賴度/低毛利/認定業績/三層毛利率、帳列未收 caveat 等一律進 `Col.help` + note。
 - **樣本**：`samples/` 與 `pack/` 進 `.gitignore`（含真實客戶資料，`tools/export_sample_reference.py` 可重跑）。
+
+## 階段 K — 「常用分析」頁：老闆工作簿精準重現（CLAUDE_CODE_TASK_6）
+把老闆工作簿 `2025年度_三公司發稿明細分析.xlsx` 的 7 張表用資料庫即時算出、畫面／Excel／PDF 三處逐格一致，期間可選。計算層與版面來自已驗證的 `perf-boss-kit`（不重寫）。
+- **`sql/009_boss_workbook.sql`**：`salesperson_alias`（別名→主檔名，seed 蔡伊閔→蔡伊閔Heidi）＋ `v_boss_line`（一列＝一條媒體上稿線，欄名＝工作簿原始資料 30 欄；規則：只留 MEDIA 線、不含轉撥、平台限四種＋健康視、交換併回原業務、瑞迪併入東吳）。驗收：2025 聲活 881／71,533,523、東吳 541／50,861,982、鉑霖 163／11,907,516。
+- **`reports/boss_workbook/`**（compute/layout/xlsx/html）：一份原始資料 → 每張表；同一份 layout 出 Excel（openpyxl，原檔樣式）與 HTML（畫面 st.html＋PDF 共用）。
+- **`pages_app/boss_workbook.py`**（側欄「⭐ 常用分析」，分析群組第一個，EXEC/FINANCE/MEDIA、SALES 不顯示）：期間 `st.radio`（去年整年／今年至今／自訂）；7 個 `st.tabs` 用 `st.html` 呈現原檔樣式；年度發稿明細逐筆明細放 expander；原始資料用 `st.dataframe`＋CSV。整本 Excel／PDF／列印版 HTML 三顆鈕＋每張表單獨印。
+- **`tools/build_boss_workbook.py`**：CLI（`--year 2025` 或 `--ym-from/--ym-to`）從 DB 產 Excel；改用專案 `db.connect()`（讀 Supabase secrets）。`compare_boss_workbook.py` 逐格比對。
+- **測試**：`tests/test_boss_workbook.py`（黃金：原檔原始資料→每張表逐格相等，**7 綠**）＋ `tests/test_boss_page.py`（v_boss_line 2025 合計 134,303,021、2026 含健康視、HTML 關鍵數字、SALES 隱藏，**4 綠**）。
+- **已知資料差異**（非邏輯，見 `docs/ASSUMPTIONS.md §H`）：3 個客戶名寫法致客戶數 262→265／257→259；同額客戶先後原檔無規則、kit 定死名稱遞增。
