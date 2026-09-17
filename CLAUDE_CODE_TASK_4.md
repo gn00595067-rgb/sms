@@ -19,12 +19,12 @@
 
 ---
 
-## 進度追蹤
+## 進度追蹤（全部完成，pytest 61 passed 零回歸）
 
-- **階段 J（完成）**：`sql/007_report_platform.sql`。report_platform 七欄；v_line_ext 加 in_media_scope/is_own_media；v_deal_summary 四平台欄改 report_platform（P0）+ 新增 net_cp_family/carrefour/clinic；v_group_month 集團毛利橋收斂 + ic_transfer_gross；新增 v_report_line。驗收 `tests/test_analysis.py::test_boss_workbook_2025` 對過老闆工作簿黃金數字（全部對到元），pytest 45 passed 零回歸。
-- **階段 K（進行中）**：口徑切換元件、分析頁改線層、公司分析平台總覽、業務矩陣加欄、客戶排名加欄。
-- **階段 L（待做）**：reports/annual_detail.py、reports/platform_overview.py、registry custom 模式。
-- **階段 M（待做）**：reports/builder.py、pages_app/report_builder.py、sql/008 saved_report、seed 六個預設、Excel 多層表頭、tests/test_builder.py。
+- **階段 J（完成 e8cc2c0）**：`sql/007_report_platform.sql`。report_platform 七欄；v_line_ext 加 in_media_scope/is_own_media；v_deal_summary 四平台欄改 report_platform（P0）+ 新增 net_cp_family/carrefour/clinic；v_group_month 集團毛利橋收斂 + ic_transfer_gross；新增 v_report_line。驗收 `test_boss_workbook_2025` 對過老闆工作簿黃金數字全對到元。
+- **階段 K（完成 d38ea53/d963390/8d401b7）**：scope 模型 + load_lines + scope_bridge + line_group_profit；公司分析平台總覽（指標切換/平台範圍/客戶數/佔比/三公司合計）+ 口徑切換元件；業務矩陣加報表平台欄（§3.3）；客戶排名加 公司(多)/業務(多)/四平台欄（§3.4）。註：分析頁排名主體維持合約層（分析口徑），客戶/業務頁全面改線層為後續。
+- **階段 L（完成 e11f05f）**：`reports/annual_detail.py`（年度發稿明細三段喬商版型，驗收鉑霖 2025 對到元）、`reports/platform_overview.py`（平台總覽八區塊 Excel，驗收 134,303,021/98,408,698/265/259）、registry custom 模式。
+- **階段 M（完成 ead7ae3）**：`sql/008`（v_report_line 加 group_profit_alloc + saved_report）、`reports/builder.py`（白名單 build_sql/shape + saved CRUD + Excel 兩層表頭）、`pages_app/report_builder.py`、`scripts/seed_saved_reports.py` 六個預設、`tests/test_builder.py` 9 tests。重現 134,303,021 / 聲活 59.2% / 月樞紐 16,050,639。
 
 ## §7 給 Peggy 姐確認（見 docs/ASSUMPTIONS.md §G）
 
