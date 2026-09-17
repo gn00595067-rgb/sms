@@ -52,7 +52,7 @@ GROUPS = {
 
 def _login_screen() -> None:
     st.title("📊 業績系統")
-    st.caption("聲活 / 東吳 / 鉑霖 / 瑞迪 — 業績統計 MVP")
+    st.caption("聲活 / 東吳 / 鉑霖 — 業績統計 MVP")
     if DEV_LOGIN:   # 測試期：只需輸入密碼即可進入（見 core/auth.py DEV_LOGIN）
         with st.form("login"):
             password = st.text_input("密碼", type="password")

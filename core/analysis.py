@@ -937,7 +937,7 @@ def filter_bar_analysis(key: str, *, user: dict | None = None,
 
     row = st.columns(4)
     with row[0]:
-        comps = [None] + [o[1] for o in _data.options("company")]
+        comps = [None] + [o[1] for o in _data.options("company") if o[1] != "瑞迪"]
         out["company"] = st.selectbox("公司別", comps,
                                       format_func=lambda v: "全部" if v is None else v, key="af_co")
     with row[1]:

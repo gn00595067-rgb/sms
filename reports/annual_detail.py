@@ -245,7 +245,7 @@ def render(user: dict | None = None) -> None:
     year_opts = [int(y) for y in years["perf_year"].tolist()] if not years.empty else [date.today().year]
     c = st.columns([1, 2, 1])
     year = c[0].selectbox("年度", year_opts, key="ad_year")
-    companies = c[1].multiselect("公司", ["聲活", "東吳", "鉑霖", "瑞迪"],
+    companies = c[1].multiselect("公司", ["聲活", "東吳", "鉑霖"],
                                  default=["聲活", "東吳", "鉑霖"], key="ad_cos")
     incl_gp = c[2].checkbox("含集團毛利欄", value=False, key="ad_gp")
     st.caption("口徑：發稿口徑（只算媒體上稿線、交換併回原業務、四平台+健康視、帳上毛利）。")
