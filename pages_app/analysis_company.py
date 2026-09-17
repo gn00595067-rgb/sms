@@ -19,9 +19,15 @@ from core.ui import feedback_widget, page_header
 user = require_role("MEDIA", "FINANCE", "EXEC")
 page_header("🏛️ 公司分析", "三層毛利橋：帳上 → 集團 → 淨利；目標達成用老闆儀表板口徑。")
 
-f = A.filter_bar_analysis("aco", user=user, show_industry=False, show_salesperson=False)
+f = A.filter_bar_analysis("aco", user=user, show_industry=False, show_salesperson=False, show_scope=True)
 yf, yt = f["ym_from"], f["ym_to"]
 pf, pt = A.prev_window(yf, yt)
+scope = f["scope"]
+
+# 線層（口徑感知）：平台總覽與客戶數用它，KPI 三層毛利橋仍用 v_company_month（集團口徑固定）
+lines = A.load_lines(yf, yt, scope=scope)
+cust_by_co = lines.groupby("company")["customer_id"].nunique() if not lines.empty else pd.Series(dtype=int)
+grp_cust = int(lines["customer_id"].nunique()) if not lines.empty else 0
 
 
 def _company_agg(a, b):
@@ -62,6 +68,7 @@ for col, name in zip(cols, main_cos):
         st.metric("除佣實收", money(en), delta=f"{pct((en-pen)/pen) if pen else '–'} 同期")
         extra = f"轉撥給聲活 {money(io)}" if io > 0 else (f"收到轉撥 {money(ii)}・固定成本 {money(fc)}" if ii > 0 else "")
         st.caption(f"帳上毛利 {money(bp)}（{pct(bp/en) if en else '–'}）")
+        st.caption(f"客戶 {int(cust_by_co.get(name, 0))} 家（不重複）")
         if extra:
             st.caption(extra)
 if g is not None:
@@ -72,6 +79,13 @@ if g is not None:
         st.metric("除佣實收", money(gen), delta=f"{pct((gen-pgen)/pgen) if pgen else '–'} 同期")
         st.caption(f"集團毛利 {money(ggp)}（{pct(ggp/gen) if gen else '–'}）")
         st.caption(f"扣固定成本後淨利 {money(gnp)}（{pct(gnp/gen) if gen else '–'}）")
+        st.caption(f"三公司不重複 {grp_cust} 家")
+
+# 口徑差異對照（發稿口徑時顯示「為什麼跟老闆的數字不一樣」）P§3.5
+if scope.get("preset") == "media":
+    bridge = A.scope_bridge(yf, yt)
+    if bridge:
+        st.caption("　".join(f"{lab} {money(v)}" for lab, v in bridge))
 
 st.divider()
 
@@ -182,26 +196,66 @@ if not tgt.empty:
 else:
     st.caption("尚未設定目標（主檔維護 → 目標）。")
 
-# ---- 公司 × 平台歸類 ----
-st.markdown("**公司 × 平台歸類：業績結構與人均產值**")
-import pandas as pd
-rows = []
-for name in main_cos:
-    r = cur[name]
-    en = float(r["en"] or 0); spn = int(r["sp"] or 0)
-    rows.append({"company": name, "net_cp": float(r["cp"] or 0), "net_fresh": float(r["fr"] or 0),
-                 "net_radio": float(r["rd"] or 0), "net_other": float(r["ot"] or 0), "total": en,
-                 "mix": A.platform_mix_text(r["cp"], r["fr"], r["rd"], r["ot"]),
-                 "booked_margin": float(r["bp"] or 0) / en if en else 0,
-                 "sp": spn, "per_sp": en / spn if spn else 0})
-pgdf = pd.DataFrame(rows)
-if not pgdf.empty:
-    A.show_ranking(pgdf, [
-        ("company", "公司", "text"), ("net_cp", "企頻", "money"), ("net_fresh", "新鮮視", "money"),
-        ("net_radio", "廣播", "money"), ("net_other", "其他", "money"), ("total", "合計", "money"),
-        ("mix", "組合", "text"),
-        ("booked_margin", "帳上毛利率", "pct"), ("sp", "業務人數", "int"), ("per_sp", "人均產值", "money"),
-    ], height=None, key="co_pg")
+# ---- 平台總計總覽（老闆版：公司 × 報表平台 × 指標）§3.1 ----
+st.markdown("**平台總計總覽**（公司 × 報表平台；老闆四欄 + 健康視）")
+oc = st.columns([3, 2])
+metric = oc[0].radio("指標", ["除佣實收", "成本", "帳上毛利", "帳上利率", "集團毛利", "集團利率"],
+                     horizontal=True, key="co_metric")
+prange = oc[1].segmented_control("平台範圍", ["全部", "自媒體（不含廣播）", "只看廣播"],
+                                 default="全部", key="co_prange")
+if lines.empty:
+    st.info("查無資料")
+else:
+    lt = lines.copy()
+    if prange == "自媒體（不含廣播）":
+        lt = lt[lt["report_platform"].isin(A.OWN_MEDIA)]
+    elif prange == "只看廣播":
+        lt = lt[lt["report_platform"] == "廣播"]
+    lt = lt.copy()
+    lt["_gp"] = A.line_group_profit(lt)
+    is_ratio = metric in ("帳上利率", "集團利率")
+    numer = {"除佣實收": "net_amount", "成本": "cost_amount", "帳上毛利": "booked_profit",
+             "帳上利率": "booked_profit", "集團毛利": "_gp", "集團利率": "_gp"}[metric]
+    plats = [p for p in A.REPORT_PLATFORM_ORDER if p in set(lt["report_platform"])]
+    net_by = lt.pivot_table(index="company", columns="report_platform", values="net_amount",
+                            aggfunc="sum", fill_value=0.0)
+    num_by = lt.pivot_table(index="company", columns="report_platform", values=numer,
+                            aggfunc="sum", fill_value=0.0)
+    cust_by = lt.groupby("company")["customer_id"].nunique()
+    order = [c for c in ("聲活", "東吳", "鉑霖", "瑞迪") if c in num_by.index]
+    grand_net = float(lt["net_amount"].sum())
+    disp_rows = []
+    for name in order + ["三公司合計"]:
+        if name == "三公司合計":
+            n_net = net_by.reindex(order).sum()
+            n_num = num_by.reindex(order).sum()
+            row_net = grand_net
+            cust = int(lt["customer_id"].nunique())
+        else:
+            n_net = net_by.loc[name] if name in net_by.index else None
+            n_num = num_by.loc[name] if name in num_by.index else None
+            row_net = float(lt[lt["company"] == name]["net_amount"].sum())
+            cust = int(cust_by.get(name, 0))
+        row = {"company": name}
+        tot_num = 0.0
+        for p in plats:
+            v_num = float(n_num[p]) if n_num is not None and p in n_num.index else 0.0
+            v_net = float(n_net[p]) if n_net is not None and p in n_net.index else 0.0
+            tot_num += v_num
+            row[p] = (v_num / v_net if v_net else None) if is_ratio else v_num
+        row["合計"] = (tot_num / row_net if row_net else None) if is_ratio else tot_num
+        row["客戶數"] = cust
+        row["佔比"] = (row_net / grand_net) if grand_net else 0.0
+        disp_rows.append(row)
+    odf = pd.DataFrame(disp_rows)
+    kind = "pct" if is_ratio else "money"
+    spec = [("company", "公司", "text")]
+    spec += [(p, p, kind) for p in plats]
+    spec += [("合計", f"合計（{metric}）", kind), ("客戶數", "客戶數", "int"),
+             ("佔比", "佔比", "progress", {"max": 1.0})]
+    A.show_ranking(odf, spec, height=None, key="co_overview")
+    st.caption(f"口徑：{scope.get('preset')}｜{prange}；利率＝Σ毛利 ÷ Σ除佣（非平均）。"
+               "營運／其它平台在發稿口徑下不列入；分析口徑會另成欄。")
 
 # ---- 進單 + 預估（公司 × 月，每家三列：進單/預估/合計）P1-5 ----
 st.markdown("**進單 + 預估（公司 × 月，單位：萬）**")

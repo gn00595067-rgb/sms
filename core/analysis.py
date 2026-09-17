@@ -269,6 +269,27 @@ def scope_bridge(ym_from: date, ym_to: date) -> list[tuple[str, float]]:
     ]
 
 
+def line_group_profit(lines: pd.DataFrame) -> pd.Series:
+    """
+    把每條線依合約比例分回「集團毛利」（§4.1）：line.net / deal.ext_net × deal.group_profit。
+    回傳與 lines 對齊的 Series。轉撥線或 ext_net=0 的合約給 0。
+    """
+    empty = pd.Series(0.0, index=(lines.index if lines is not None else None), dtype=float)
+    if lines is None or lines.empty or "deal_id" not in lines.columns:
+        return empty
+    ids = [int(x) for x in lines["deal_id"].dropna().unique().tolist()]
+    if not ids:
+        return empty
+    ds = _df("select deal_id, ext_net, group_profit from v_deal_summary where deal_id = any(%s)", (ids,))
+    if ds.empty:
+        return empty
+    ds = ds.set_index("deal_id")
+    en = pd.to_numeric(ds["ext_net"], errors="coerce")
+    gp = pd.to_numeric(ds["group_profit"], errors="coerce")
+    margin = (gp / en.where(en != 0)).fillna(0.0)   # 每合約集團毛利率
+    return (lines["net_amount"] * lines["deal_id"].map(margin)).fillna(0.0).astype(float)
+
+
 def open_month() -> dict | None:
     """本月（進行中）概況：perf_ym / deals / ext_net / last_entry。無資料回 None。"""
     df = _df("select perf_ym, deals, ext_net, last_entry from v_open_month")
@@ -735,14 +756,40 @@ def _nearest_month(target: date, months: list[date]) -> date:
     return min(months, key=lambda m: abs((m - target).days)) if months else target
 
 
+def scope_bar(key: str) -> dict:
+    """
+    口徑切換元件（TASK_4 §3.5）：分析口徑 / 發稿口徑（老闆版）/ 自訂。
+    回傳 resolve_scope 後的 dict（含五個旗標與 preset）。自訂展開五個勾選。
+    """
+    label = st.segmented_control(
+        "口徑", ["分析口徑", "發稿口徑（老闆版）", "自訂"],
+        default="分析口徑", key=f"{key}_scope", help=(
+            "分析口徑＝全部對外線、排除交換（系統預設）；"
+            "發稿口徑＝老闆年度表：只算媒體上稿線、四平台+健康視、交換併回原業務；"
+            "自訂＝自己勾。轉撥線一律不算。"))
+    preset = {"分析口徑": "analysis", "發稿口徑（老闆版）": "media", "自訂": "custom"}.get(label, "analysis")
+    scope: dict = {"preset": preset}
+    if preset == "custom":
+        base = resolve_scope("custom")
+        with st.expander("自訂口徑", expanded=True):
+            c = st.columns(5)
+            scope["include_production"] = c[0].checkbox("含製作費線", value=base["include_production"], key=f"{key}_sc_prod")
+            scope["include_barter"] = c[1].checkbox("含交換", value=base["include_barter"], key=f"{key}_sc_bar")
+            scope["include_house"] = c[2].checkbox("含公司戶", value=base["include_house"], key=f"{key}_sc_house")
+            scope["include_ops_other"] = c[3].checkbox("含營運與其它平台", value=base["include_ops_other"], key=f"{key}_sc_ops")
+            scope["merge_ruidi"] = c[4].checkbox("瑞迪併入東吳", value=base["merge_ruidi"], key=f"{key}_sc_ruidi")
+    return resolve_scope(scope)
+
+
 def filter_bar_analysis(key: str, *, user: dict | None = None,
                         show_industry: bool = True, show_salesperson: bool = True,
-                        show_house_toggle: bool = False) -> dict:
+                        show_house_toggle: bool = False, show_scope: bool = False) -> dict:
     """
     分析頁共用篩選列（跨頁保留：所有 widget 用共用 key）。回傳 dict：ym_from, ym_to,
     company, platform_group, industry, salesperson, customer, exclude_barter,
-    include_house, includes_open（迄月是否含進行中月份）。
+    include_house, includes_open（迄月是否含進行中月份）, scope（口徑 dict）。
     期間預設 今年 1 月 → 截止月（= 最後已結束的月，P0-3）。SALES 角色隱藏業務篩選。
+    show_scope=True 時在最上方顯示口徑切換（§3.5）。
     """
     from core.format import ym_text
     from core import data as _data
@@ -754,6 +801,7 @@ def filter_bar_analysis(key: str, *, user: dict | None = None,
     def_from, def_to = window_defaults()
     ss = st.session_state
     out: dict = {}
+    out["scope"] = scope_bar(key) if show_scope else resolve_scope("analysis")
 
     if not months:
         out.update(ym_from=def_from, ym_to=def_to, company=None, platform_group=None,
