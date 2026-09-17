@@ -1,4 +1,3 @@
-# Streamlit Community Cloud 用（apt）：Chromium 執行所需的系統程式庫 + 中文字型
 fonts-noto-cjk
 libnss3
 libnspr4
