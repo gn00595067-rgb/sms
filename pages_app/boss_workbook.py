@@ -68,9 +68,9 @@ praw, plats = L.prepare(raw)
 notes_lines = C.notes(raw, n_all, n_prod, prod_cost, year_label)
 n_media = len(raw)
 
-st.caption(f"媒體上稿線 {n_media:,} 筆（不含製作費 {n_prod:,} 筆）・交換併回原業務・瑞迪併入東吳・"
+st.caption(f"媒體上稿線 {n_media:,} 筆（不含製作費 {n_prod:,} 筆）・交換併回原業務・"
            f"客戶數含 0 元客戶・平台：{'／'.join(plats)}"
-           + ("　⚠ 2024 全部登在瑞迪，公司別無意義，只看三公司合計" if ym_from.year <= 2024 and ym_to.year <= 2024 else ""))
+           + ("　⚠ 2024 公司別已合併、無意義，只看三公司合計" if ym_from.year <= 2024 and ym_to.year <= 2024 else ""))
 
 
 # 工作表順序：說明與假設放最後（其餘＝工作簿順序）。匯出 Excel / PDF 同此順序。
