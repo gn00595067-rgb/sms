@@ -194,18 +194,19 @@ st.caption(f"目前模式：**{st.session_state.get('de_mode','新建')}**　合
 
 
 # ------------------------------------------------------------------ Header
-def _sel_id(label, table, current, colcnt):
+def _sel_id(label, table, current, colcnt, key=None):
     opts = data.options(table)
     values = [None] + [o[0] for o in opts]
     names = {None: "（無）", **{o[0]: o[1] for o in opts}}
     idx = values.index(current) if current in values else 0
-    return colcnt.selectbox(label, values, index=idx, format_func=lambda v: names.get(v, str(v)))
+    return colcnt.selectbox(label, values, index=idx, key=key,
+                            format_func=lambda v: names.get(v, str(v)))
 
 
 st.subheader("合約基本資料")
 h1, h2 = st.columns(2)
-header["company_id"] = _sel_id("公司別 *", "company", header.get("company_id"), h1)
-header["salesperson_id"] = _sel_id("業務 *", "salesperson", header.get("salesperson_id"), h2)
+header["company_id"] = _sel_id("公司別 *", "company", header.get("company_id"), h1, key="de_company")
+header["salesperson_id"] = _sel_id("業務 *", "salesperson", header.get("salesperson_id"), h2, key="de_salesperson")
 
 # 客戶搜尋
 h3, h4 = st.columns(2)
@@ -228,8 +229,8 @@ with h4:
 with st.expander("➕ 新增客戶（找不到時）"):
     nc1, nc2, nc3 = st.columns(3)
     new_name = nc1.text_input("客戶名稱", key="de_newcust")
-    new_cat = _sel_id("客戶類別", "customer_category", None, nc2)
-    new_ind = _sel_id("產業別", "industry", None, nc3)
+    new_cat = _sel_id("客戶類別", "customer_category", None, nc2, key="de_new_cust_cat")
+    new_ind = _sel_id("產業別", "industry", None, nc3, key="de_new_cust_ind")
     if st.button("建立客戶"):
         if new_name.strip():
             with transaction(user["username"]) as cur:
@@ -242,9 +243,9 @@ with st.expander("➕ 新增客戶（找不到時）"):
             st.warning("請輸入名稱")
 
 h5, h6, h7 = st.columns(3)
-header["group_id"] = _sel_id("組別", "business_group", header.get("group_id"), h5)
-header["sales_category_id"] = _sel_id("業績類別 *", "sales_category", header.get("sales_category_id"), h6)
-header["industry_id"] = _sel_id("產業別", "industry", header.get("industry_id"), h7)
+header["group_id"] = _sel_id("組別", "business_group", header.get("group_id"), h5, key="de_group")
+header["sales_category_id"] = _sel_id("業績類別 *", "sales_category", header.get("sales_category_id"), h6, key="de_sales_category")
+header["industry_id"] = _sel_id("產業別", "industry", header.get("industry_id"), h7, key="de_industry")
 
 h8, h9, h10 = st.columns(3)
 dc_opts = ["", "直客", "廣代"]
@@ -259,7 +260,7 @@ with st.expander("七種人員 / 簽核狀態"):
                                     ("copy_staff_id", "文案"), ("assist_staff_id", "協辦"),
                                     ("cs_staff_id", "客服"), ("billing_staff_id", "請款"),
                                     ("closing_staff_id", "結案")]):
-        header[fld] = _sel_id(lab, "staff", header.get(fld), staff_cols[i % 4])
+        header[fld] = _sel_id(lab, "staff", header.get(fld), staff_cols[i % 4], key=f"de_staff_{fld}")
     sc = st.columns(3)
     header["is_original_received"] = sc[0].checkbox("正本", value=bool(header.get("is_original_received")))
     header["is_copy_received"] = sc[1].checkbox("影本", value=bool(header.get("is_copy_received")))
