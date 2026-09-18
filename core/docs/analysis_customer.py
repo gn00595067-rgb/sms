@@ -53,8 +53,8 @@ def build_doc(f: dict, user: dict | None = None) -> X.Doc:
             ("companies_multi", "公司(多)", "text"), ("salespeople_multi", "業務(多)", "text"),
             X.Col("ext_net", "除佣實收", "money", help=EXT_NET),
             X.Col("share", "佔比", "progress", max=float(cl["share"].max()) if len(cl) else 1.0, help=SHARE),
-            ("net_cp_family", "全家企頻", "money"), ("net_cp_carrefour", "萬家福", "money"),
-            ("net_fresh", "新鮮視", "money"), ("net_radio", "廣播", "money"),
+            ("net_cp_family", "全家企頻", "money"), ("net_fresh", "新鮮視", "money"),
+            ("net_cp_carrefour", "萬家福", "money"), ("net_radio", "廣播", "money"),
             ("booked_profit", "帳上毛利", "money"), ("booked_margin", "毛利率", "pct"),
             X.Col("yoy_text", "同期%", "text", help=SAME_PERIOD)),
             wide=True, note=f"{SAME_PERIOD}；佔比分母＝期間客戶合計。")
@@ -160,8 +160,8 @@ def build_doc(f: dict, user: dict | None = None) -> X.Doc:
         X.Col("ext_net", "除佣實收", "money", help=EXT_NET), X.Col("yoy_text", "同期%", "text", help=SAME_PERIOD),
         X.Col("share", "佔比", "progress", max=float(cust["share"].max()), help=SHARE),
         X.Col("cum_share", "累計佔比", "pct", help=CUM),
-        ("net_cp_family", "全家企頻", "money"), ("net_cp_carrefour", "萬家福", "money"),
-        ("net_fresh", "新鮮視", "money"), ("net_radio", "廣播", "money"),
+        ("net_cp_family", "全家企頻", "money"), ("net_fresh", "新鮮視", "money"),
+        ("net_cp_carrefour", "萬家福", "money"), ("net_radio", "廣播", "money"),
         ("booked_profit", "帳上毛利", "money"), ("booked_margin", "毛利率", "pct"), ("net_margin", "淨利率", "pct"),
         ("deals", "筆數", "int"), ("months_since_last", "距上次交易(月)", "int"), ("avg_deal", "平均單筆", "money"),
         ("strategy_hint", "策略提示", "text"))

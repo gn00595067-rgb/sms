@@ -48,8 +48,8 @@ def build_doc(f: dict, user: dict | None = None) -> X.Doc:
             ("rank_in_year", "#", "int"), ("salesperson", "業務", "text"), ("main_company", "公司", "text"),
             X.Col("ext_net", "除佣實收", "money", help=EXT_NET),
             X.Col("share", "佔比", "progress", max=float(nonh["share"].max()) if len(nonh) else 1.0, help=SHARE),
-            ("net_cp_family", "全家企頻", "money"), ("net_cp_carrefour", "萬家福", "money"),
-            ("net_fresh", "新鮮視", "money"), ("net_radio", "廣播", "money"),
+            ("net_cp_family", "全家企頻", "money"), ("net_fresh", "新鮮視", "money"),
+            ("net_cp_carrefour", "萬家福", "money"), ("net_radio", "廣播", "money"),
             ("booked_profit", "帳上毛利", "money"), ("booked_margin", "毛利率", "pct"),
             ("customers", "客戶數", "int"), X.Col("yoy_text", "同期%", "text", help=SAME_PERIOD)),
             wide=True, note=f"{SAME_PERIOD}；公司戶不列入。")

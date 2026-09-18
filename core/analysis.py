@@ -151,7 +151,7 @@ def load_deals(ym_from: date, ym_to: date, filters: dict | None = None,
 
 # ------------------------------------------------------------------ 口徑（scope）與線層載入（階段 K / TASK_4 §3.5）
 # 老闆報表平台的固定欄序
-REPORT_PLATFORM_ORDER = ["全家企頻", "萬家福", "新鮮視", "廣播", "健康視", "營運", "其它"]
+REPORT_PLATFORM_ORDER = ["全家企頻", "新鮮視", "萬家福", "廣播", "健康視", "營運", "其它"]  # 新鮮視也是全家的，排全家企頻旁
 OWN_MEDIA = ["全家企頻", "萬家福", "新鮮視", "健康視"]          # 自媒體（不含廣播）
 MEDIA_PLATFORMS = ["全家企頻", "萬家福", "新鮮視", "廣播", "健康視"]  # 老闆四欄 + 健康視
 
@@ -298,7 +298,7 @@ def _plat_cols(lines: pd.DataFrame, index_col: str) -> pd.DataFrame:
     """把線層 df 依 index_col × report_platform 樞紐出四平台欄（全家企頻/萬家福/新鮮視/廣播）。"""
     piv = lines.pivot_table(index=index_col, columns="report_platform", values="net_amount",
                             aggfunc="sum", fill_value=0.0)
-    ren = {"全家企頻": "net_cp_family", "萬家福": "net_cp_carrefour", "新鮮視": "net_fresh", "廣播": "net_radio"}
+    ren = {"全家企頻": "net_cp_family", "新鮮視": "net_fresh", "萬家福": "net_cp_carrefour", "廣播": "net_radio"}
     for k, v in ren.items():
         piv[v] = piv[k] if k in piv.columns else 0.0
     return piv[list(ren.values())]
