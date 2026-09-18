@@ -984,10 +984,11 @@ def filter_bar_analysis(key: str, *, user: dict | None = None,
 
 
 # 產業 × 報表平台 熱圖用的欄（標籤 → 訂單層預切淨額欄）；順序即顯示順序
+# 全家系列（全家企頻／新鮮視）相鄰，再萬家福／樂家康（家樂福）、廣播
 IND_PLATFORM_SRC = {
     "全家企頻": "net_cp_family",
-    "萬家福／樂家康": "net_cp_carrefour",   # 家樂福新名＝樂家康
     "新鮮視": "net_fresh",
+    "萬家福／樂家康": "net_cp_carrefour",   # 家樂福新名＝樂家康
     "廣播": "net_radio",
 }
 
