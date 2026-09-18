@@ -88,20 +88,17 @@ with c2:
 
 # ---- 產業 × 平台歸類熱圖（含數字，單位：萬）----
 st.markdown("**產業 × 平台歸類**（除佣實收；產業取前 9；數字為萬）")
-dd = d.copy()
-dd["ind"] = dd["industry"].fillna("(未分類)")
-dd["pg"] = dd["main_platform_group"].map(lambda p: p if p in ("企頻", "新鮮視", "廣播") else "其他")
-top9 = dd.groupby("ind")["ext_net"].sum().sort_values(ascending=False).head(9).index.tolist()
-pv = dd[dd["ind"].isin(top9)].pivot_table(index="ind", columns="pg", values="ext_net", aggfunc="sum")
-pv = (pv.reindex(index=top9, columns=["企頻", "新鮮視", "廣播", "其他"]).fillna(0) / 10000)
-pv["合計"] = pv.sum(axis=1)
-zmax = float(pv[["企頻", "新鮮視", "廣播", "其他"]].values.max()) or 1.0
-fig3 = px.imshow(pv.values, x=list(pv.columns), y=top9, color_continuous_scale="Blues", aspect="auto",
-                 text_auto=",.0f", zmax=zmax, labels=dict(color="萬"))
-fig3.update_traces(textfont_size=11)
-fig3.update_layout(height=max(280, 38 * len(top9)), margin=dict(l=8, r=8, t=8, b=8),
-                   coloraxis_showscale=False, font=dict(family="Noto Sans TC, Microsoft JhengHei"))
-st.plotly_chart(fig3, use_container_width=True)
+pv, top9, pcols = A.industry_platform_matrix(d, top_n=9)
+if pv is None:
+    st.info("查無資料")
+else:
+    zmax = float(pv[pcols].values.max()) or 1.0
+    fig3 = px.imshow(pv.values, x=list(pv.columns), y=top9, color_continuous_scale="Blues", aspect="auto",
+                     text_auto=",.0f", zmax=zmax, labels=dict(color="萬"))
+    fig3.update_traces(textfont_size=11)
+    fig3.update_layout(height=max(280, 38 * len(top9)), margin=dict(l=8, r=8, t=8, b=8),
+                       coloraxis_showscale=False, font=dict(family="Noto Sans TC, Microsoft JhengHei"))
+    st.plotly_chart(fig3, use_container_width=True)
 
 # ---- 訂單排名 ----
 st.markdown("**訂單排名**" + ("（點一列 → 業績登打修改）" if can_edit_deal else ""))

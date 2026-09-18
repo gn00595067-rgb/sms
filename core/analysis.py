@@ -983,6 +983,38 @@ def filter_bar_analysis(key: str, *, user: dict | None = None,
     return out
 
 
+# 產業 × 報表平台 熱圖用的欄（標籤 → 訂單層預切淨額欄）；順序即顯示順序
+IND_PLATFORM_SRC = {
+    "全家企頻": "net_cp_family",
+    "萬家福／樂家康": "net_cp_carrefour",   # 家樂福新名＝樂家康
+    "新鮮視": "net_fresh",
+    "廣播": "net_radio",
+}
+
+
+def industry_platform_matrix(d: pd.DataFrame, top_n: int = 9):
+    """產業 × 報表平台 矩陣（單位：萬）。回 (pv, top_industries, platform_labels)。
+
+    平台欄用訂單層已預切的淨額（net_cp_family/carrefour/fresh/radio，報表平台口徑，
+    與客戶排名四平台欄同源）；「其他」＝該產業 ext_net −四平台（含健康視/營運/其它）；
+    「合計」＝四平台＋其他 ≈ 該產業除佣實收。pv 為 None 表示無資料。"""
+    labels = list(IND_PLATFORM_SRC.keys()) + ["其他"]
+    if d is None or d.empty:
+        return None, [], labels
+    dd = d.copy()
+    dd["ind"] = dd["industry"].fillna("(未分類)")
+    tot = dd.groupby("ind")["ext_net"].sum()
+    top = tot.sort_values(ascending=False).head(top_n).index.tolist()
+    if not top:
+        return None, [], labels
+    g = dd[dd["ind"].isin(top)].groupby("ind")
+    pv = pd.DataFrame({lab: g[col].sum() for lab, col in IND_PLATFORM_SRC.items()}).reindex(top).fillna(0.0)
+    pv["其他"] = (tot.reindex(top) - pv.sum(axis=1)).clip(lower=0)   # 健康視/營運/其它，聚合後恆非負
+    pv = pv[labels] / 1e4
+    pv["合計"] = pv[labels].sum(axis=1)
+    return pv, top, labels
+
+
 def show_ranking(df: pd.DataFrame, columns: list, *, height: int | None = 460,
                  key: str | None = None, on_select=None, selection_mode="single-row"):
     """

@@ -75,24 +75,18 @@ def build_doc(f: dict, user: dict | None = None, *, sort_opt: str = "除佣實�
             X.Chart("毛利率分佈（單位：萬）", figB, height=260, caption="紅＝虧損、黃＝低毛利(0–16%)、藍＝健康"))
 
     # ---- 產業 × 平台歸類熱圖 ----
-    dd = d.copy()
-    dd["ind"] = dd["industry"].fillna("(未分類)")
-    dd["pg"] = dd["main_platform_group"].map(lambda p: p if p in ("企頻", "新鮮視", "廣播") else "其他")
-    top9 = dd.groupby("ind")["ext_net"].sum().sort_values(ascending=False).head(9).index.tolist()
-    if top9:
-        pv = dd[dd["ind"].isin(top9)].pivot_table(index="ind", columns="pg", values="ext_net", aggfunc="sum")
-        pv = (pv.reindex(index=top9, columns=["企頻", "新鮮視", "廣播", "其他"]).fillna(0) / 1e4)
-        pv["合計"] = pv.sum(axis=1)
-        zmax = float(pv[["企頻", "新鮮視", "廣播", "其他"]].values.max()) or 1.0
+    pv, top9, pcols = A.industry_platform_matrix(d, top_n=9)
+    if pv is not None:
+        zmax = float(pv[pcols].values.max()) or 1.0
         fig3 = px.imshow(pv.values, x=list(pv.columns), y=top9, color_continuous_scale="Blues", aspect="auto",
                          text_auto=",.0f", zmax=zmax, labels=dict(color="萬"))
         fig3.update_traces(textfont_size=11)
         fig3.update_layout(height=max(280, 38 * len(top9)), coloraxis_showscale=False)
-        ex = pv.reset_index().rename(columns={"ind": "產業"})
+        ex = pv.reset_index().rename(columns={"ind": "產業", "index": "產業"})
         doc.chart("產業 × 平台歸類（除佣實收，前 9 產業，數字為萬）", fig3, height=max(280, 38 * len(top9)),
                   caption="顏色深＝金額大；末欄為該產業合計",
-                  excel={"type": "matrix", "df": ex[["產業", "企頻", "新鮮視", "廣播", "其他"]],
-                         "x": "產業", "series": ["企頻", "新鮮視", "廣播", "其他"], "unit": "萬"})
+                  excel={"type": "matrix", "df": ex[["產業"] + pcols],
+                         "x": "產業", "series": pcols, "unit": "萬"})
 
     # ---- 訂單排名 ----
     doc.heading("訂單排名")
