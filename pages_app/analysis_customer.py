@@ -204,8 +204,8 @@ if sel_tier and sel_tier in tier_label:
         f"**{tier_label[sel_tier]}：{len(sub)} 家・合計 {wan(sub['ext_net'].sum())}"
         f"（佔全體 {pct(sub['ext_net'].sum() / total) if total else '–'}）**　·　點一列 → 客戶頁")
     tier_cols = [
-        ("rank_in_year", "#", "int", {"width": "small"}),
-        ("customer", "客戶", "text"),
+        ("rank_in_year", "#", "int", {"width": "small", "pin": True}),
+        ("customer", "客戶", "text", {"pin": True}),
         ("industry", "產業", "text", {"width": "small"}),
         ("main_salesperson", "主要業務", "text", {"width": "small"}),
         ("status", "狀態", "text", {"width": "small"}),
@@ -264,8 +264,8 @@ if sel_ind:
             f"（佔全體 {pct(itot / total) if total else '–'}）**　·　"
             "金額/毛利/筆數只算該產業訂單　·　點一列 → 客戶頁" + cross_note)
         ind_cols = [
-            ("rank_in_year", "#", "int", {"width": "small"}),
-            ("customer", "客戶", "text"),
+            ("rank_in_year", "#", "int", {"width": "small", "pin": True}),
+            ("customer", "客戶", "text", {"pin": True}),
             ("main_industry", "主力產業", "text", {"width": "small"}),
             ("main_salesperson", "主要業務", "text", {"width": "small"}),
             ("status", "狀態", "text", {"width": "small"}),
@@ -333,8 +333,8 @@ tbl["mix"] = tbl.apply(lambda r: A.platform_mix_text(r["net_cp"], r["net_fresh"]
 tbl["trend"] = tbl["customer"].map(lambda c: trends.get(c, []))
 
 slim = [
-    ("rank_in_year", "#", "int", {"width": "small"}),
-    ("customer", "客戶", "text"),
+    ("rank_in_year", "#", "int", {"width": "small", "pin": True}),
+    ("customer", "客戶", "text", {"pin": True}),
     ("status", "狀態", "text", {"width": "small"}),
     ("ext_net", "除佣實收", "money"),
     ("yoy_text", "同期%", "text", {"width": "small"}),
@@ -346,8 +346,8 @@ slim = [
     ("strategy_hint", "策略提示", "text"),
 ]
 full = [
-    ("rank_in_year", "#", "int", {"width": "small"}),
-    ("customer", "客戶", "text"),
+    ("rank_in_year", "#", "int", {"width": "small", "pin": True}),
+    ("customer", "客戶", "text", {"pin": True}),
     ("industry", "產業", "text"),
     ("companies_multi", "公司(多)", "text", {"width": "small"}),
     ("salespeople_multi", "業務(多)", "text"),

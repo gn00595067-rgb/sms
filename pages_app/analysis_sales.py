@@ -110,7 +110,7 @@ sort_col = {"除佣實收": "ext_net", "帳上毛利": "booked_profit", "毛利�
 top = d.sort_values(sort_col, ascending=False).head(50)
 ev = A.show_ranking(top, [
     ("contract_no", "合約", "text"), ("ad_name", "廣告", "text"),
-    ("customer", "客戶", "text"), ("industry", "產業", "text"),
+    ("customer", "客戶", "text", {"pin": True}), ("industry", "產業", "text"),
     ("salesperson", "業務", "text"), ("company", "公司", "text"),
     ("platform_groups", "平台歸類", "text"), ("perf_ym_text", "年月", "text"),
     ("ext_net", "除佣實收", "money"), ("booked_cost", "實付", "money"),

@@ -1000,12 +1000,13 @@ def show_ranking(df: pd.DataFrame, columns: list, *, height: int | None = 460,
         col, header, kind = spec[0], spec[1], spec[2]
         opts = spec[3] if len(spec) > 3 else {}
         order.append(header)
+        pinned = True if opts.get("pin") else None   # 釘在左側，橫向捲動不消失（Streamlit 1.36+）
         if kind in ("money", "int"):
             disp[header] = pd.to_numeric(df[col], errors="coerce").round(0)
-            cfg[header] = st.column_config.NumberColumn(header, format="localized", width=opts.get("width"))
+            cfg[header] = st.column_config.NumberColumn(header, format="localized", width=opts.get("width"), pinned=pinned)
         elif kind == "pct":
             disp[header] = pd.to_numeric(df[col], errors="coerce")
-            cfg[header] = st.column_config.NumberColumn(header, format="percent", width=opts.get("width"))
+            cfg[header] = st.column_config.NumberColumn(header, format="percent", width=opts.get("width"), pinned=pinned)
         elif kind == "progress":
             v = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
             disp[header] = v
@@ -1013,17 +1014,17 @@ def show_ranking(df: pd.DataFrame, columns: list, *, height: int | None = 460,
             if not mx or mx <= 0:
                 mx = float(v.max()) if len(v) and float(v.max()) > 0 else 1.0
             cfg[header] = st.column_config.ProgressColumn(
-                header, format=opts.get("format", "percent"), min_value=0.0, max_value=float(mx))
+                header, format=opts.get("format", "percent"), min_value=0.0, max_value=float(mx), pinned=pinned)
         elif kind == "bar":
             disp[header] = df[col].values
-            cfg[header] = st.column_config.BarChartColumn(header, help=opts.get("help"))
+            cfg[header] = st.column_config.BarChartColumn(header, help=opts.get("help"), pinned=pinned)
         elif kind == "line":
             disp[header] = df[col].values
-            cfg[header] = st.column_config.LineChartColumn(header, help=opts.get("help"))
+            cfg[header] = st.column_config.LineChartColumn(header, help=opts.get("help"), pinned=pinned)
         else:  # text（NaN/None 顯示空白，不印 'None'）
             s = df[col]
             disp[header] = s.where(s.notna(), "").astype(object)
-            cfg[header] = st.column_config.TextColumn(header, width=opts.get("width"))
+            cfg[header] = st.column_config.TextColumn(header, width=opts.get("width"), pinned=pinned)
     kwargs = dict(column_config=cfg, hide_index=True, use_container_width=True, key=key)
     if isinstance(height, int) and height > 0:
         kwargs["height"] = height   # None → 讓 Streamlit 自動高度（1.63 不接受 height=None）

@@ -95,8 +95,8 @@ show_all = st.toggle("顯示全部欄位", value=False, key="sp_allcols")
 nonh["mix"] = nonh.apply(lambda r: A.platform_mix_text(r["net_cp"], r["net_fresh"], r["net_radio"], r["net_other"]), axis=1)
 share_max = float(nonh["share"].max()) if n else 1.0
 slim = [
-    ("rank_in_year", "#", "int", {"width": "small"}),
-    ("salesperson", "業務", "text"),
+    ("rank_in_year", "#", "int", {"width": "small", "pin": True}),
+    ("salesperson", "業務", "text", {"pin": True}),
     ("main_company", "公司", "text", {"width": "small"}),
     ("ext_net", "除佣實收", "money"),
     ("share", "佔比", "progress", {"max": share_max}),
@@ -108,8 +108,8 @@ slim = [
     ("top3_share", "前3大依賴度", "pct"),
 ]
 full = [
-    ("rank_in_year", "#", "int", {"width": "small"}),
-    ("salesperson", "業務", "text"),
+    ("rank_in_year", "#", "int", {"width": "small", "pin": True}),
+    ("salesperson", "業務", "text", {"pin": True}),
     ("main_company", "公司", "text", {"width": "small"}),
     ("main_group", "組別", "text"),
     ("ext_net", "除佣實收", "money"),
