@@ -136,10 +136,10 @@ def _preview(grids: list[G.Grid], *, key: str, title: str, period: str, max_rows
 
 
 # ------------------------------------------------------------------ 六個分頁
-tabs = st.tabs(["業績成本報表(區間)", "媒體發稿量分析", "成本毛利分析", "獎金總表(分平台成本)", "業績達成表", "三單查詢", "電台預付查詢", "對帳表(業績vs會計帳)", "說明"])
+tabs = st.tabs(["對帳表(業績vs會計帳)", "獎金總表(分平台成本)", "業績成本報表(區間)", "媒體發稿量分析", "成本毛利分析", "業績達成表", "三單查詢", "電台預付查詢", "說明"])
 
-# 1 ---------------------------------------------------------------- 業績成本報表(區間)
-with tabs[0]:
+# 業績成本報表(區間)
+with tabs[2]:
     st.markdown("#### 業績表區間統計 → 月業績成本報表")
     ym_from, ym_to, t_from, t_to = _period_bar("f1")
     opts = option_lists(ym_from, ym_to)
@@ -158,8 +158,8 @@ with tabs[0]:
             which = st.radio("顯示", ["全部", "只看最後一頁（平台總表）"], horizontal=True, key="f1_which")
         _preview(grids if which == "全部" else grids[-1:], key="f1", title="月業績成本報表", period=f"{t_from}~{t_to}")
 
-# 2 ---------------------------------------------------------------- 媒體發稿量分析
-with tabs[1]:
+# 媒體發稿量分析
+with tabs[3]:
     st.markdown("#### 電台發稿量分析")
     ym_from, ym_to, t_from, t_to = _period_bar("f2")
     opts = option_lists(ym_from, ym_to)
@@ -179,8 +179,8 @@ with tabs[1]:
                    "新版每個電台多一列「合計」（舊版沒有）。")
         _preview(grids, key="f2", title=f"月電台發稿量{version}", period=f"{t_from}~{t_to}")
 
-# 3 ---------------------------------------------------------------- 成本毛利分析
-with tabs[2]:
+# 成本毛利分析
+with tabs[4]:
     st.markdown("#### 聲活成本毛利分析")
     ym_from, ym_to, t_from, t_to = _period_bar("f3")
     opts = option_lists(ym_from, ym_to)
@@ -227,8 +227,8 @@ with tabs[2]:
         st.caption("執行波段 = 不重複的（客戶, 廣告, 合約編號）；平均單波 = 實收（毛利）÷ 波段；平台區塊：企頻＝平台含「企」、新鮮視、廣播（健康視／營運只進合計，同舊報表）。A3 橫向。")
         _preview(grids, key="f3e", title="業務發稿統計報表", period=f"{t_from}~{t_to}")
 
-# 3d' --------------------------------------------------------------- 獎金總表(製作成本分平台) 獨立分頁（常用，拉到上方）
-with tabs[3]:
+# 獎金總表(製作成本分平台) 獨立分頁（常用，放最前）
+with tabs[1]:
     st.markdown("#### 月獎金計算總表（製作成本分平台）")
     ym_from, ym_to, t_from, t_to = _period_bar("fbp")
     opts = option_lists(ym_from, ym_to)
@@ -244,8 +244,8 @@ with tabs[3]:
                    "（成本毛利分析分頁也有同一張。）")
         _preview(grids, key="fbp", title="月獎金計算總表(製作成本分平台)", period=f"{t_from}~{t_to}")
 
-# 4 ---------------------------------------------------------------- 業績達成表
-with tabs[4]:
+# 業績達成表
+with tabs[5]:
     st.markdown("#### 業績達成統計 → 月責任檔業績達成表")
     ym_from, ym_to, t_from, t_to = _period_bar("f4")
     opts = option_lists(ym_from, ym_to)
@@ -260,8 +260,8 @@ with tabs[4]:
                    "小計 = 業績類別、合計 = 業務、總計 = 組別。舊版把製作費藏在隱藏列、只在小計出現；新版直接放在合約列上。")
         _preview(grids, key="f4", title="月責任檔業績達成表", period=f"{t_from}~{t_to}")
 
-# 5 ---------------------------------------------------------------- 三單查詢
-with tabs[5]:
+# 三單查詢
+with tabs[6]:
     st.markdown("#### 三單查詢")
     c1, c2, c3 = st.columns([2, 2, 3])
     contract_no = c1.text_input("合約編號", key="f5_cue", placeholder="例：1150622").strip()
@@ -304,8 +304,8 @@ with tabs[5]:
                 st.caption("舊系統沒有此單的樣張，版面依 發票開立資料表 欄位設計；單號 = 舊資料的單號、新資料的發票 id。")
                 _preview(grids, key="f5b", title=f"發票開立申請單_{contract_no}", period=contract_no)
 
-# 6 ---------------------------------------------------------------- 電台預付查詢
-with tabs[6]:
+# 電台預付查詢
+with tabs[7]:
     st.markdown("#### 電台預付查詢")
     today = date.today()
     c1, c2, c3, c4 = st.columns([2, 2, 2, 2])
@@ -350,8 +350,8 @@ with tabs[6]:
         grids = L.layout_prepay(groups, d_from=d_from.strftime("%Y/%m/%d"), d_to=d_to.strftime("%Y/%m/%d"), channel_text="/".join(ch) or "*")
         _preview(grids, key="f6", title="電台預付明細表", period=f"{d_from:%Y-%m-%d}~{d_to:%Y-%m-%d}")
 
-# 7' --------------------------------------------------------------- 業績系統 vs 會計帳 對帳表
-with tabs[7]:
+# 業績系統 vs 會計帳 對帳表（放最前）
+with tabs[0]:
     st.markdown("#### 業績系統 vs 會計帳 對帳表（媒體發稿量分）")
     ym_from, ym_to, t_from, t_to = _period_bar("frc")
     opts = option_lists(ym_from, ym_to)
