@@ -136,7 +136,7 @@ def _preview(grids: list[G.Grid], *, key: str, title: str, period: str, max_rows
 
 
 # ------------------------------------------------------------------ 六個分頁
-tabs = st.tabs(["業績成本報表(區間)", "媒體發稿量分析", "成本毛利分析", "業績達成表", "三單查詢", "電台預付查詢", "說明"])
+tabs = st.tabs(["業績成本報表(區間)", "媒體發稿量分析", "成本毛利分析", "獎金總表(分平台成本)", "業績達成表", "三單查詢", "電台預付查詢", "說明"])
 
 # 1 ---------------------------------------------------------------- 業績成本報表(區間)
 with tabs[0]:
@@ -227,8 +227,25 @@ with tabs[2]:
         st.caption("執行波段 = 不重複的（客戶, 廣告, 合約編號）；平均單波 = 實收（毛利）÷ 波段；平台區塊：企頻＝平台含「企」、新鮮視、廣播（健康視／營運只進合計，同舊報表）。A3 橫向。")
         _preview(grids, key="f3e", title="業務發稿統計報表", period=f"{t_from}~{t_to}")
 
-# 4 ---------------------------------------------------------------- 業績達成表
+# 3d' --------------------------------------------------------------- 獎金總表(製作成本分平台) 獨立分頁（常用，拉到上方）
 with tabs[3]:
+    st.markdown("#### 月獎金計算總表（製作成本分平台）")
+    ym_from, ym_to, t_from, t_to = _period_bar("fbp")
+    opts = option_lists(ym_from, ym_to)
+    f = _filters("fbp", opts, ["groups", "salespeople", "exclude"])
+    df = C.apply_filters(load_lines(ym_from, ym_to), f)
+    if df.empty:
+        st.info("此條件查無資料")
+    else:
+        bs = C.bonus_summary_platform_cost(df)
+        grids = L.layout_bonus_summary_platform_cost(bs, ym_from=t_from, ym_to=t_to,
+                                                     sales_text="/".join(f.salespeople) or "*", group_text="/".join(f.groups) or "*")
+        st.caption("同月獎金計算總表，但每平台同時列「除佣實收」與「製作成本」兩組欄；製作成本合計 = 7 個平台製作成本相加 = 原獎金總表的製作成本。A3 橫向。"
+                   "（成本毛利分析分頁也有同一張。）")
+        _preview(grids, key="fbp", title="月獎金計算總表(製作成本分平台)", period=f"{t_from}~{t_to}")
+
+# 4 ---------------------------------------------------------------- 業績達成表
+with tabs[4]:
     st.markdown("#### 業績達成統計 → 月責任檔業績達成表")
     ym_from, ym_to, t_from, t_to = _period_bar("f4")
     opts = option_lists(ym_from, ym_to)
@@ -244,7 +261,7 @@ with tabs[3]:
         _preview(grids, key="f4", title="月責任檔業績達成表", period=f"{t_from}~{t_to}")
 
 # 5 ---------------------------------------------------------------- 三單查詢
-with tabs[4]:
+with tabs[5]:
     st.markdown("#### 三單查詢")
     c1, c2, c3 = st.columns([2, 2, 3])
     contract_no = c1.text_input("合約編號", key="f5_cue", placeholder="例：1150622").strip()
@@ -288,7 +305,7 @@ with tabs[4]:
                 _preview(grids, key="f5b", title=f"發票開立申請單_{contract_no}", period=contract_no)
 
 # 6 ---------------------------------------------------------------- 電台預付查詢
-with tabs[5]:
+with tabs[6]:
     st.markdown("#### 電台預付查詢")
     today = date.today()
     c1, c2, c3, c4 = st.columns([2, 2, 2, 2])
@@ -333,8 +350,8 @@ with tabs[5]:
         grids = L.layout_prepay(groups, d_from=d_from.strftime("%Y/%m/%d"), d_to=d_to.strftime("%Y/%m/%d"), channel_text="/".join(ch) or "*")
         _preview(grids, key="f6", title="電台預付明細表", period=f"{d_from:%Y-%m-%d}~{d_to:%Y-%m-%d}")
 
-# 7 ---------------------------------------------------------------- 說明
-with tabs[6]:
+# 8 ---------------------------------------------------------------- 說明
+with tabs[7]:
     st.markdown("#### 說明")
     st.markdown(
         "本專區把舊 Access 業績系統仍在用的六個財務功能，用資料庫即時算、版型與數字 100% 重現。"

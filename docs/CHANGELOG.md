@@ -129,6 +129,6 @@
 - **`sql/010_finance.sql`**：`channel_rebate_rate`（電台年度退佣 2024–2026 seed 30 列）、`channel_payment_rule`（電台付款規則 seed 40 列）、`media_channel` 採購欄位（現金折扣／現金預付／一般付款／採購單備註／聯播網）、`v_finance_line`（財務報表唯一資料來源）、`v_channel_prepay`（電台預付日推算）、`v_invoice_request`；`platform.sort_order` 全家企頻修為 0；`channel_payment_rule`／`channel_rebate_rate` 掛稽核 trigger。
 - **主檔維護**加 3 個 tab：電台付款規則、電台年度退佣（有「複製去年 → 今年」按鈕）、電台採購欄位。
 - 與舊報表**刻意不同**（都在頁面 caption 與「說明」分頁）：業績成本報表最後一頁 (3)/(4)/(5) 填真實值、綜合分析「其他」欄有值、責任檔達成表製作成本放在合約列、認定表 C 欄印真實成本、電台發稿量每電台多一列合計。
-- **追加報表（成本毛利分析）**：「獎金總表(製作成本分平台A3)」——同月獎金計算總表版型，但每平台同時列「除佣實收」與「製作成本」兩組欄（A3 橫向）；製作成本合計 = 7 平台製作成本相加 = 原獎金總表製作成本。`compute.bonus_summary_platform_cost` + `layout.layout_bonus_summary_platform_cost`。
+- **追加報表**：「獎金總表(製作成本分平台A3)」——同月獎金計算總表版型，但每平台同時列「除佣實收」與「製作成本」兩組欄（A3 橫向）；製作成本合計 = 7 平台製作成本相加 = 原獎金總表製作成本。`compute.bonus_summary_platform_cost` + `layout.layout_bonus_summary_platform_cost`。常用故另拉成**獨立上方分頁「獎金總表(分平台成本)」**（第 4 個 tab，自帶期間/組別/業務篩選），成本毛利分析分頁內也保留同一張。
 - **測試**：`pytest tests/test_finance.py -q` = **15 passed**（V109g 快照黃金數字；換快照自動 skip）；全套 `pytest -q` 零回歸。
 - **待財務確認**（不影響上線）：聯播網歸屬、發票開立申請單版面、業績達成表其餘四種版型（見 `CLAUDE_CODE_TASK_7.md §7`）。
