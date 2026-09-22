@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -235,5 +236,211 @@ with ttab:
     _edit_targets(user)
 with ftab:
     _edit_forecast(user)
+
+
+# ====================================================================
+# 電台財務規則（財務報表專區 TASK_7 用）
+# ====================================================================
+PAY_TYPES = ["每月2付", "次月1付", "次週三付", "第N天付", "播畢第N天付", "播畢次月1付"]
+
+
+def _channel_maps():
+    mc = mdata.media_channels()
+    name_to_id = {r["name"]: int(r["id"]) for _, r in mc.iterrows()}
+    return name_to_id, list(name_to_id.keys())
+
+
+def _edit_channel_payment(user):
+    st.caption("電台預付日推算規則（電台預付查詢用）。鍵＝電台＋是否聯網；同一電台聯網／非聯網可各一條。刪除列＝停用該規則。")
+    ch_map, ch_names = _channel_maps()
+    df = _fetch_df(
+        """select r.id, mc.name as channel, r.is_network, r.pay_type, r.first_cutoff_day, r.second_cutoff_day,
+                  r.same_month_day, r.next_month_day, r.n_days, r.note
+           from channel_payment_rule r join media_channel mc on mc.id = r.media_channel_id
+           order by mc.sort_order, mc.name, r.is_network""")
+    if df.empty:
+        df = pd.DataFrame(columns=["id", "channel", "is_network", "pay_type", "first_cutoff_day",
+                                   "second_cutoff_day", "same_month_day", "next_month_day", "n_days", "note"])
+    disp = pd.DataFrame({
+        "id": df["id"], "電台": df["channel"], "聯網": df["is_network"].fillna(False),
+        "付款種類": df["pay_type"], "一段日前": df["first_cutoff_day"], "二段日前": df["second_cutoff_day"],
+        "當月付款日": df["same_month_day"], "次月付款日": df["next_month_day"], "第N天付款": df["n_days"],
+        "備註": df["note"].fillna("") if "note" in df else "",
+    })
+    edited = st.data_editor(
+        disp, num_rows="dynamic", hide_index=True, use_container_width=True, key="cpr_editor",
+        column_config={
+            "id": st.column_config.NumberColumn("id", disabled=True),
+            "電台": st.column_config.SelectboxColumn("電台", options=ch_names, required=True),
+            "聯網": st.column_config.CheckboxColumn("聯網"),
+            "付款種類": st.column_config.SelectboxColumn("付款種類", options=PAY_TYPES, required=True),
+            "一段日前": st.column_config.NumberColumn("一段日前", min_value=0, max_value=31, step=1, format="%d",
+                                               help="每月2付：上檔日 ≤ 此日 → 當月付款日"),
+            "二段日前": st.column_config.NumberColumn("二段日前", min_value=0, max_value=31, step=1, format="%d"),
+            "當月付款日": st.column_config.NumberColumn("當月付款日", min_value=0, max_value=31, step=1, format="%d"),
+            "次月付款日": st.column_config.NumberColumn("次月付款日", min_value=0, max_value=31, step=1, format="%d"),
+            "第N天付款": st.column_config.NumberColumn("第N天付款", min_value=0, max_value=90, step=1, format="%d"),
+            "備註": st.column_config.TextColumn("備註"),
+        })
+    if st.button("儲存付款規則", key="save_cpr"):
+        ins = upd = dele = 0
+        keep_ids = {int(v) for v in edited["id"] if not pd.isna(v)}
+        orig_ids = {int(v) for v in df["id"] if not pd.isna(v)}
+        with transaction(user["username"]) as cur:
+            for _, r in edited.iterrows():
+                ch = (r["電台"] or "").strip()
+                pt = (r["付款種類"] or "").strip()
+                if ch not in ch_map or pt not in PAY_TYPES:
+                    continue
+                vals = (ch_map[ch], bool(r["聯網"]), pt, int(r["一段日前"] or 0), int(r["二段日前"] or 0),
+                        int(r["當月付款日"] or 0), int(r["次月付款日"] or 0), int(r["第N天付款"] or 0), (r["備註"] or None))
+                if pd.isna(r["id"]):
+                    cur.execute(
+                        """insert into channel_payment_rule(media_channel_id, is_network, pay_type, first_cutoff_day,
+                           second_cutoff_day, same_month_day, next_month_day, n_days, note)
+                           values (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                           on conflict (media_channel_id, is_network) do update set
+                           pay_type=excluded.pay_type, first_cutoff_day=excluded.first_cutoff_day,
+                           second_cutoff_day=excluded.second_cutoff_day, same_month_day=excluded.same_month_day,
+                           next_month_day=excluded.next_month_day, n_days=excluded.n_days, note=excluded.note""", vals)
+                    ins += 1
+                else:
+                    cur.execute(
+                        """update channel_payment_rule set media_channel_id=%s, is_network=%s, pay_type=%s,
+                           first_cutoff_day=%s, second_cutoff_day=%s, same_month_day=%s, next_month_day=%s,
+                           n_days=%s, note=%s where id=%s""", vals + (int(r["id"]),))
+                    upd += 1
+            for rid in orig_ids - keep_ids:
+                cur.execute("delete from channel_payment_rule where id=%s", (rid,))
+                dele += 1
+        clear_cache()
+        st.success(f"已儲存付款規則：新增 {ins}、更新 {upd}、停用 {dele}")
+
+
+def _edit_channel_rebate(user):
+    st.caption("電台年度退佣%（媒體發稿量分析「毛利+退佣」用）。10＝10%。每年需新增當年度；可用下方按鈕整批複製。")
+    ch_map, ch_names = _channel_maps()
+    this_year = date.today().year
+    c1, c2, c3 = st.columns([1, 1, 2])
+    src_year = c1.number_input("來源年", min_value=2020, max_value=2100, value=this_year - 1, step=1, key="reb_src")
+    dst_year = c2.number_input("目標年", min_value=2020, max_value=2100, value=this_year, step=1, key="reb_dst")
+    if c3.button(f"複製 {int(src_year)} → {int(dst_year)}（只補缺）", key="copy_rebate"):
+        with transaction(user["username"]) as cur:
+            cur.execute(
+                """insert into channel_rebate_rate(media_channel_id, year, rebate_pct, note)
+                   select media_channel_id, %s, rebate_pct, note from channel_rebate_rate where year=%s
+                   on conflict (media_channel_id, year) do nothing""", (int(dst_year), int(src_year)))
+            n = cur.rowcount
+        clear_cache()
+        st.success(f"已從 {int(src_year)} 複製 {n} 筆到 {int(dst_year)}")
+        st.rerun()
+    df = _fetch_df(
+        """select r.id, mc.name as channel, r.year, r.rebate_pct, r.note
+           from channel_rebate_rate r join media_channel mc on mc.id = r.media_channel_id
+           order by r.year desc, mc.sort_order, mc.name""")
+    if df.empty:
+        df = pd.DataFrame(columns=["id", "channel", "year", "rebate_pct", "note"])
+    disp = pd.DataFrame({
+        "id": df["id"], "電台": df["channel"], "年度": df["year"],
+        "退佣%": df["rebate_pct"].map(lambda v: float(v) if pd.notna(v) else None),
+        "備註": df["note"].fillna("") if "note" in df else "",
+    })
+    edited = st.data_editor(
+        disp, num_rows="dynamic", hide_index=True, use_container_width=True, key="reb_editor",
+        column_config={
+            "id": st.column_config.NumberColumn("id", disabled=True),
+            "電台": st.column_config.SelectboxColumn("電台", options=ch_names, required=True),
+            "年度": st.column_config.NumberColumn("年度", min_value=2020, max_value=2100, step=1, format="%d"),
+            "退佣%": st.column_config.NumberColumn("退佣%", min_value=0.0, max_value=100.0, step=0.01, format="%.4f",
+                                              help="10＝10%（毛利+退佣＝毛利＋實付×退佣%÷100）"),
+            "備註": st.column_config.TextColumn("備註"),
+        })
+    if st.button("儲存年度退佣", key="save_rebate"):
+        ins = upd = dele = 0
+        keep_ids = {int(v) for v in edited["id"] if not pd.isna(v)}
+        orig_ids = {int(v) for v in df["id"] if not pd.isna(v)}
+        with transaction(user["username"]) as cur:
+            for _, r in edited.iterrows():
+                ch = (r["電台"] or "").strip()
+                if ch not in ch_map or pd.isna(r["年度"]) or pd.isna(r["退佣%"]):
+                    continue
+                vals = (ch_map[ch], int(r["年度"]), float(r["退佣%"]), (r["備註"] or None))
+                if pd.isna(r["id"]):
+                    cur.execute(
+                        """insert into channel_rebate_rate(media_channel_id, year, rebate_pct, note)
+                           values (%s,%s,%s,%s) on conflict (media_channel_id, year)
+                           do update set rebate_pct=excluded.rebate_pct, note=excluded.note""", vals)
+                    ins += 1
+                else:
+                    cur.execute(
+                        "update channel_rebate_rate set media_channel_id=%s, year=%s, rebate_pct=%s, note=%s where id=%s",
+                        vals + (int(r["id"]),))
+                    upd += 1
+            for rid in orig_ids - keep_ids:
+                cur.execute("delete from channel_rebate_rate where id=%s", (rid,))
+                dele += 1
+        clear_cache()
+        st.success(f"已儲存年度退佣：新增 {ins}、更新 {upd}、刪除 {dele}")
+
+
+def _edit_channel_purchase(user):
+    st.caption("電台採購申請單用欄位（現金折扣、現金預付、一般付款、採購單備註、聯播網）。只編輯既有電台，新增電台請到「電台/成本項目」。")
+    df = _fetch_df(
+        """select id, name, cash_discount_pct, is_cash_prepaid, is_normal_payment, purchase_note, network_name
+           from media_channel order by sort_order, name""")
+    if df.empty:
+        st.info("尚無電台資料。")
+        return
+    disp = pd.DataFrame({
+        "id": df["id"], "電台": df["name"],
+        "現金折扣%": df["cash_discount_pct"].map(lambda v: round(float(v) * 100, 4) if pd.notna(v) else 0.0),
+        "現金預付": df["is_cash_prepaid"].fillna(False),
+        "一般付款": df["is_normal_payment"].fillna(False),
+        "採購單備註": df["purchase_note"].fillna("") if "purchase_note" in df else "",
+        "聯播網": df["network_name"].fillna("") if "network_name" in df else "",
+    })
+    edited = st.data_editor(
+        disp, num_rows="fixed", hide_index=True, use_container_width=True, key="mcp_editor",
+        column_config={
+            "id": st.column_config.NumberColumn("id", disabled=True),
+            "電台": st.column_config.TextColumn("電台", disabled=True),
+            "現金折扣%": st.column_config.NumberColumn("現金折扣%", min_value=0.0, max_value=100.0, step=0.01,
+                                                 format="%.2f", help="4＝4%（採購申請單現折金額＝實付×現金折扣%÷100）"),
+            "現金預付": st.column_config.CheckboxColumn("現金預付"),
+            "一般付款": st.column_config.CheckboxColumn("一般付款"),
+            "採購單備註": st.column_config.TextColumn("採購單備註", help="印在採購申請單備註欄，如「已於預付明細表申請」"),
+            "聯播網": st.column_config.SelectboxColumn("聯播網", options=["", "好事", "城市"],
+                                                 help="採購申請單「好事／城市聯播網總額」用"),
+        })
+    if st.button("儲存採購欄位", key="save_mcp"):
+        orig = {int(r["id"]): r for _, r in df.iterrows()}
+        upd = 0
+        with transaction(user["username"]) as cur:
+            for _, r in edited.iterrows():
+                rid = int(r["id"])
+                o = orig.get(rid)
+                new_disc = round(float(r["現金折扣%"] or 0) / 100, 4)
+                new = (new_disc, bool(r["現金預付"]), bool(r["一般付款"]),
+                       (r["採購單備註"] or None), (r["聯播網"] or None))
+                old = (round(float(o["cash_discount_pct"] or 0), 4), bool(o["is_cash_prepaid"]),
+                       bool(o["is_normal_payment"]), (o["purchase_note"] or None), (o["network_name"] or None))
+                if new != old:
+                    cur.execute(
+                        """update media_channel set cash_discount_pct=%s, is_cash_prepaid=%s, is_normal_payment=%s,
+                           purchase_note=%s, network_name=%s where id=%s""", new + (rid,))
+                    upd += 1
+        clear_cache()
+        st.success(f"已儲存採購欄位：更新 {upd} 筆")
+
+
+st.divider()
+st.subheader("電台財務規則（財務報表專區用）")
+ptab, rtab, mtab = st.tabs(["💰 電台付款規則", "↩️ 電台年度退佣", "🧾 電台採購欄位"])
+with ptab:
+    _edit_channel_payment(user)
+with rtab:
+    _edit_channel_rebate(user)
+with mtab:
+    _edit_channel_purchase(user)
 
 feedback_widget("masters")

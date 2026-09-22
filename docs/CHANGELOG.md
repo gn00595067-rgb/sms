@@ -122,3 +122,12 @@
 - **`tools/build_boss_workbook.py`**：CLI（`--year 2025` 或 `--ym-from/--ym-to`）從 DB 產 Excel；改用專案 `db.connect()`（讀 Supabase secrets）。`compare_boss_workbook.py` 逐格比對。
 - **測試**：`tests/test_boss_workbook.py`（黃金：原檔原始資料→每張表逐格相等，**7 綠**）＋ `tests/test_boss_page.py`（v_boss_line 2025 合計 134,303,021、2026 含健康視、HTML 關鍵數字、SALES 隱藏，**4 綠**）。
 - **已知資料差異**（非邏輯，見 `docs/ASSUMPTIONS.md §H`）：3 個客戶名寫法致客戶數 262→265／257→259；同額客戶先後原檔無規則、kit 定死名稱遞增。
+
+## TASK_7 財務報表專區（舊 Access 六個財務功能 100% 重現）— 完成
+- 新頁面 **📑 財務報表專區**（`pages_app/finance_reports.py`，導覽群組「財務」，FINANCE / EXEC）：業績成本報表(區間)、媒體發稿量分析（5 版本 × 5 排序）、成本毛利分析（綜合分析／客戶同期比較表 ×4／業績認定表／月獎金計算總表／業務發稿統計 A3）、業績達成表（月責任檔業績達成表）、三單查詢（廣告時段採購申請單／發票開立申請單）、電台預付查詢（明細表＋標記已付款）＋「說明」分頁。
+- 版面照舊 Access 報表逐格排（`reports/finance/layout.py`），畫面／PDF／Excel 同一份 Grid（`reports/finance/grid.py`）；數字與《舊業績系統現有功能》PDF 截圖逐格相同（`tests/test_finance.py` 14 項黃金測試）。資料一律走 `v_finance_line`（一列＝一條上稿線，不套分析口徑）。
+- **`sql/010_finance.sql`**：`channel_rebate_rate`（電台年度退佣 2024–2026 seed 30 列）、`channel_payment_rule`（電台付款規則 seed 40 列）、`media_channel` 採購欄位（現金折扣／現金預付／一般付款／採購單備註／聯播網）、`v_finance_line`（財務報表唯一資料來源）、`v_channel_prepay`（電台預付日推算）、`v_invoice_request`；`platform.sort_order` 全家企頻修為 0；`channel_payment_rule`／`channel_rebate_rate` 掛稽核 trigger。
+- **主檔維護**加 3 個 tab：電台付款規則、電台年度退佣（有「複製去年 → 今年」按鈕）、電台採購欄位。
+- 與舊報表**刻意不同**（都在頁面 caption 與「說明」分頁）：業績成本報表最後一頁 (3)/(4)/(5) 填真實值、綜合分析「其他」欄有值、責任檔達成表製作成本放在合約列、認定表 C 欄印真實成本、電台發稿量每電台多一列合計。
+- **測試**：`pytest tests/test_finance.py -q` = **14 passed**（V109g 快照黃金數字；換快照自動 skip）；全套 `pytest -q` 零回歸。
+- **待財務確認**（不影響上線）：聯播網歸屬、發票開立申請單版面、業績達成表其餘四種版型（見 `CLAUDE_CODE_TASK_7.md §7`）。

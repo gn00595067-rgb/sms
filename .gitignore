@@ -16,6 +16,8 @@ docs/report_design_mockup.html
 # 匯出層樣本 / 月報包產出（含真實客戶資料，可用 tools/export_sample_reference.py 重跑）
 samples/
 pack/
+finance_kit/
+finance_kit/samples/
 
 # python
 .venv/
