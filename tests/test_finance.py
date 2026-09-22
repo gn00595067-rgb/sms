@@ -289,6 +289,36 @@ def test_purchase_request_1150622():
 
 
 @requires_db
+def test_reconciliation_2026_ytd_east():
+    """業績系統 vs 會計帳 對帳表（115/01-08 東吳組）：逐列數字與手工底稿相同（新鮮視除外，屬快照差）；推算恆等式成立。"""
+    from core.data import query_df
+    from reports.finance import compute as C, grid as G, layout as L
+    if not _v109g(query_df):
+        pytest.skip("DB 不是 V109g 快照")
+    raw = C.prepare(query_df("select * from v_finance_line where perf_ym between %s and %s and business_group='東吳組'",
+                             (date(2026, 1, 1), date(2026, 8, 1))))
+    res = C.reconciliation(raw)
+    rows = {r["label"]: r for r in res["rows"]}
+    assert round(rows["全家企頻"]["gross"]) == 14247923 and round(rows["全家企頻"]["net"]) == 13029268
+    assert round(rows["全家企頻"]["barter"]) == 270000 and round(rows["全家企頻"]["acct_rev"]) == 12759268
+    assert round(rows["家樂福企頻"]["gross"]) == 3897976
+    assert round(rows["廣播"]["net"]) == 308571 and round(rows["廣播"]["cost"]) == 0
+    assert round(rows["BEST989"]["cost"]) == 24150 and round(rows["BEST989"]["disc_pct"], 4) == 0.05
+    assert round(rows["NEWS98"]["cost"]) == 95744 and round(rows["NEWS98"]["disc_pct"], 4) == 0.04
+    t = res["total"]
+    assert round(t["acct_rev"]) == round(t["net"] - t["barter"])                 # 會計帳收入 = 除傭 − 交換
+    cd = res["cost_diff"]
+    assert round(cd["製作費"] + cd["廣告交換帳未認成本-企"] + cd["廣告交換帳未認成本-新"]
+                 + cd["廣告交換帳未認成本-其他"] + cd["四捨五入差"]) == round(t["cost"] - t["acct_cost"])
+    assert round(cd["會計帳成本"]) == round(t["cost"] - cd["製作費"] - t["barter"])
+    assert round(res["barter"]["net_amount"].sum()) == round(t["barter"])
+    grids = L.layout_reconciliation(res, ym_from="2026/01", ym_to="2026/08", group_text="東吳組")
+    html = G.to_html(grids, title="x")
+    assert "業績系統 vs 會計帳 對帳表" in html and "廣告交換明細" in html and "14,247,923" in html
+    assert G.to_xlsx(grids)[:2] == b"PK"
+
+
+@requires_db
 def test_layouts_render_html_and_xlsx(raw08, raw08_prev):
     from reports.finance import compute as C, grid as G, layout as L
     period = dict(ym_from="2026/08", ym_to="2026/08")

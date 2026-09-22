@@ -528,3 +528,56 @@ def layout_prepay(groups: list[dict], *, d_from: str, d_to: str, channel_text: s
         g.add(blanks(4, cls="noborder") + [T("電台應付小計:", span=2, cls="b right blue noborder"), M(grp["total"], cls="b", fill="lyellow")] + blanks(8, cls="noborder"))
         g.gap()
     return [g]
+
+
+# ================================================================ 7. 業績系統 vs 會計帳 對帳表（媒體發稿量分）
+RECON_W = [16, 13, 13, 13, 11, 13, 13, 10, 7]      # 列樣 + 業績系統4 + 會計帳4 = 9 欄
+_RECON_FILL = {5: "lorange", 4: "lblue"}           # 5=製作費 6橘、4=廣播 藍
+
+
+def layout_reconciliation(res: dict, *, ym_from: str, ym_to: str, group_text: str = "*") -> list[Grid]:
+    """一張對帳表（主表 + 收入/成本差異 + 廣告交換明細）。數字全由業績系統推算，見各表註解。"""
+    # ---- 主表 ----
+    g = Grid("對帳表", widths=RECON_W, landscape=True, font_size=9.5, header_rows=3)
+    g.add([T(f"{_period(ym_from, ym_to)} 業績系統 vs 會計帳 對帳表（媒體發稿量分） 組別: {group_text}", span=9, cls="b big noborder left")], "title")
+    g.add([T("列樣", cls="b ctr", fill="grey", rowspan=2),
+           T("業績系統", span=4, cls="b ctr", fill="lblue"), T("會計帳", span=4, cls="b ctr", fill="lgreen")], height=20)
+    g.add([T(h, cls="b ctr wrap", fill="lblue") for h in ("加總-實收金額", "加總-除傭實收", "加總-實付金額", "交換")]
+          + [T(h, cls="b ctr wrap", fill="lgreen") for h in ("收入", "成本", "折讓", "現%")], height=28)
+
+    def _row(r, *, fill=None, bold=False):
+        b = "b" if bold else ""
+        gk = r.get("_grp")
+        f = fill or (_RECON_FILL.get(gk) if not bold else fill)
+        return [T(r["label"], cls=f"{'b ' if bold else ''}", fill=fill or ("grey" if gk == 5 else None)),
+                M(r["gross"], cls=b, fill=f), M(r["net"], cls=b, fill=f), M(r["cost"], cls=b, fill=f),
+                M(r["barter"] or None, cls=b, fill=f),
+                M(r["acct_rev"], cls=b, fill=f), M(r["acct_cost"], cls=b, fill=f),
+                M(r["discount"] or None, cls=b, fill=f), P(r["disc_pct"], 1, cls=b, fill=f) if r["disc_pct"] else T(fill=f)]
+
+    for r in res["rows"]:
+        g.add(_row(r), "kwn")
+    g.add(_row(res["total"], fill="cyan", bold=True))
+
+    # ---- 差異分析（收入差異 + 成本差異）----
+    s = Grid("差異分析", widths=[22, 14], landscape=True, font_size=10, header_rows=1)
+    s.add([T("收入差異（業績系統 → 會計帳）", span=2, cls="b ctr", fill="lgreen")], "title")
+    for k, v in res["rev_diff"].items():
+        fill = "lgreen" if k == "會計帳收入" else None
+        s.add([T(k, cls="left", fill=fill), M(v, cls="b" if fill else "", fill=fill)])
+    s.gap()
+    s.add([T("成本差異（業績系統 → 會計帳）", span=2, cls="b ctr", fill="gold")], "title")
+    cd = res["cost_diff"]
+    for k in ("製作費", "廣告交換帳未認成本-企", "廣告交換帳未認成本-新", "廣告交換帳未認成本-其他", "四捨五入差", "成本差異合計", "實付金額", "會計帳成本"):
+        fill = "gold" if k in ("成本差異合計", "會計帳成本") else None
+        s.add([T(k, cls="left", fill=fill), M(cd[k], cls="b" if fill else "", fill=fill)])
+
+    # ---- 廣告交換明細 ----
+    b = Grid("廣告交換明細", widths=[14, 20, 20, 12, 10, 12], landscape=True, font_size=9.5, header_rows=2)
+    b.add([T("廣告交換明細（is_barter；交換金額 = 除傭實收，不列入會計帳收入）", span=6, cls="b big noborder left")], "title")
+    b.add([T(h, cls="b ctr", fill="lgreen") for h in ("合約編號", "客戶名稱", "廣告名稱", "上檔日期", "平台", "交換金額")])
+    for _, r in res["barter"].iterrows():
+        b.add([T(r["contract_no"], cls="small"), T(r["customer"], cls="wrap small"), T(r["ad_name"], cls="wrap small"),
+               T(r["air_period_text"], cls="ctr"), T(r["fin_platform"], cls="ctr"), M(r["net_amount"])])
+    b.add([T("合計", span=5, cls="b right", fill="lgreen"), M(float(res["barter"]["net_amount"].sum()) if len(res["barter"]) else 0, cls="b", fill="lgreen")])
+    return [g, s, b]

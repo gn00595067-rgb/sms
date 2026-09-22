@@ -136,7 +136,7 @@ def _preview(grids: list[G.Grid], *, key: str, title: str, period: str, max_rows
 
 
 # ------------------------------------------------------------------ 六個分頁
-tabs = st.tabs(["業績成本報表(區間)", "媒體發稿量分析", "成本毛利分析", "獎金總表(分平台成本)", "業績達成表", "三單查詢", "電台預付查詢", "說明"])
+tabs = st.tabs(["業績成本報表(區間)", "媒體發稿量分析", "成本毛利分析", "獎金總表(分平台成本)", "業績達成表", "三單查詢", "電台預付查詢", "對帳表(業績vs會計帳)", "說明"])
 
 # 1 ---------------------------------------------------------------- 業績成本報表(區間)
 with tabs[0]:
@@ -350,8 +350,29 @@ with tabs[6]:
         grids = L.layout_prepay(groups, d_from=d_from.strftime("%Y/%m/%d"), d_to=d_to.strftime("%Y/%m/%d"), channel_text="/".join(ch) or "*")
         _preview(grids, key="f6", title="電台預付明細表", period=f"{d_from:%Y-%m-%d}~{d_to:%Y-%m-%d}")
 
-# 8 ---------------------------------------------------------------- 說明
+# 7' --------------------------------------------------------------- 業績系統 vs 會計帳 對帳表
 with tabs[7]:
+    st.markdown("#### 業績系統 vs 會計帳 對帳表（媒體發稿量分）")
+    ym_from, ym_to, t_from, t_to = _period_bar("frc")
+    opts = option_lists(ym_from, ym_to)
+    groups = opts.get("business_group", [])
+    default_i = groups.index("東吳組") if "東吳組" in groups else 0
+    grp = st.selectbox("組別", groups, index=default_i, key="frc_grp") if groups else None
+    lines = load_lines(ym_from, ym_to)
+    if grp:
+        lines = lines[lines["business_group"] == grp]
+    if lines.empty:
+        st.info("此條件查無資料")
+    else:
+        res = C.reconciliation(lines)
+        grids = L.layout_reconciliation(res, ym_from=t_from, ym_to=t_to, group_text=grp or "*")
+        st.caption("全部由業績系統（v_finance_line）推算：**會計帳收入 = 除傭實收 − 交換**；**會計帳成本 = 實付金額 − 製作費 − 交換未認成本**；"
+                   "折讓 = Σ(實付 × 電台現金折扣%)、現% = 折讓 ÷ 實付；交換 = 廣告交換線（is_barter）的除傭實收（不列入會計帳收入）。"
+                   "數字為當前資料庫快照，與手工底稿可能因抓取日不同而有差（例：新鮮視）。")
+        _preview(grids, key="frc", title=f"對帳表_{grp or '全部'}", period=f"{t_from}~{t_to}")
+
+# 8 ---------------------------------------------------------------- 說明
+with tabs[8]:
     st.markdown("#### 說明")
     st.markdown(
         "本專區把舊 Access 業績系統仍在用的六個財務功能，用資料庫即時算、版型與數字 100% 重現。"

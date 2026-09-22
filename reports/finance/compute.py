@@ -514,6 +514,74 @@ def purchase_request(lines: pd.DataFrame) -> dict:
     return {"rows": d, "totals": tot, "networks": net, "net": net_total, "profit": profit, "margin": _ratio(profit, net_total)}
 
 
+# ---------------------------------------------------------------- 7. 業績系統 vs 會計帳 對帳表（媒體發稿量分）
+RECON_PLAT_ORDER = ["全家企頻", "家樂福企頻", "新鮮視", "健康視", "其他", "營運"]
+
+
+def _recon_rowkey(row) -> tuple:
+    """(排序群, 次序, 列標籤)：製作費分收入/配音員/錄音室；廣播分電台（收入列 '廣播'）；其餘依 fin_platform。"""
+    if row["is_production"]:
+        mc = row["media_channel"] or ""
+        if "配音" in mc:
+            return (5, 1, "製作費-配音員")
+        if "錄音" in mc:
+            return (5, 2, "製作費-錄音室")
+        return (5, 0, "製作費收入")
+    if row["fin_platform"] == "廣播":
+        mc = row["media_channel"] or ""
+        if mc in ("廣播", ""):
+            return (4, -1, "廣播")
+        return (4, 0, mc)                                    # 廣播電台成本列（BEST989 / NEWS98 …）
+    order = {p: i for i, p in enumerate(RECON_PLAT_ORDER)}
+    return (order.get(row["fin_platform"], 3), 0, row["fin_platform"])
+
+
+def _recon_agg(sub: pd.DataFrame) -> dict:
+    gross = float(sub["gross_amount"].sum())
+    net = float(sub["net_amount"].sum())
+    cost = float(sub["cost_amount"].sum())
+    barter = float(sub.loc[sub["is_barter"], "net_amount"].sum())
+    prod = float(sub.loc[sub["is_production"], "cost_amount"].sum())
+    discount = float((sub["cost_amount"] * sub["channel_cash_discount_pct"]).round(0).sum())   # 現金折讓額
+    return {"gross": gross, "net": net, "cost": cost, "barter": barter,
+            "acct_rev": net - barter,                        # 會計帳收入 = 除傭實收 − 交換
+            "acct_cost": cost - prod - barter,               # 會計帳成本 = 實付 − 製作費 − 交換未認成本
+            "discount": discount, "disc_pct": _ratio(discount, cost)}
+
+
+def reconciliation(df: pd.DataFrame) -> dict:
+    """業績系統（實收/除傭/實付/交換）對會計帳（收入/成本/折讓/現%），全部由 v_finance_line 推算。
+    會計帳收入 = 除傭 − 交換；會計帳成本 = 實付 − 製作費 − 交換未認成本。回傳主表列、總計、收入/成本差異、廣告交換明細。"""
+    d = df.copy()
+    d["is_barter"] = d["is_barter"].fillna(False).astype(bool) if "is_barter" in d else False
+    keys = d.apply(_recon_rowkey, axis=1)
+    d["_grp"] = [k[0] for k in keys]
+    d["_sub"] = [k[1] for k in keys]
+    d["_lab"] = [k[2] for k in keys]
+    rows = []
+    for (grp, sub, lab), g in d.groupby(["_grp", "_sub", "_lab"], sort=False):
+        a = _recon_agg(g)
+        a.update({"label": lab, "_grp": grp, "_sub": sub})
+        rows.append(a)
+    rows.sort(key=lambda a: (a["_grp"], a["_sub"], -a["cost"], zh_key(a["label"])))
+    total = _recon_agg(d)
+    total["label"] = "總計"
+    # 成本差異
+    prod = float(d.loc[d["is_production"], "cost_amount"].sum())
+    bq = float(d.loc[d["is_barter"] & (d["plat_z"] == "企頻"), "net_amount"].sum())
+    bx = float(d.loc[d["is_barter"] & (d["fin_platform"] == "新鮮視"), "net_amount"].sum())
+    bo = float(d.loc[d["is_barter"] & (d["plat_z"] != "企頻") & (d["fin_platform"] != "新鮮視"), "net_amount"].sum())
+    round_diff = total["cost"] - total["acct_cost"] - prod - bq - bx - bo
+    cost_diff = {"製作費": prod, "廣告交換帳未認成本-企": bq, "廣告交換帳未認成本-新": bx,
+                 "廣告交換帳未認成本-其他": bo, "四捨五入差": round_diff,
+                 "成本差異合計": prod + bq + bx + bo + round_diff, "實付金額": total["cost"], "會計帳成本": total["acct_cost"]}
+    rev_diff = {"業績系統除傭實收": total["net"], "交換（不列入會計帳收入）": total["barter"], "會計帳收入": total["acct_rev"]}
+    # 廣告交換明細
+    bd = d[d["is_barter"]].sort_values(["fin_platform", "contract_no"]).copy()
+    barter = bd[["contract_no", "customer", "ad_name", "air_period_text", "fin_platform", "net_amount"]].reset_index(drop=True)
+    return {"rows": rows, "total": total, "cost_diff": cost_diff, "rev_diff": rev_diff, "barter": barter}
+
+
 # ---------------------------------------------------------------- 6. 電台預付明細表
 def prepay_groups(pp: pd.DataFrame) -> list[dict]:
     """pp = v_channel_prepay 篩過日期／電台／合約；依電台分組（電台順序 → 名稱），組內依預付日、合約。"""
