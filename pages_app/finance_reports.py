@@ -187,7 +187,7 @@ with tabs[2]:
     f = _filters("f3", opts, ["groups", "salespeople", "ad_like", "contract_like", "industries", "channels", "platforms",
                              "customer_categories", "customers", "companies", "exclude"])
     report = st.radio("成本毛利報表選擇", ["綜合分析", "客戶同期比較(全部)", "客戶同期比較(企頻)", "客戶同期比較(廣播)", "客戶同期比較(新鮮視)",
-                                          "業績認定表", "獎金總表(月獎金計算總表)", "業務發稿統計(A3)"], horizontal=True, key="f3_rep")
+                                          "業績認定表", "獎金總表(月獎金計算總表)", "獎金總表(製作成本分平台A3)", "業務發稿統計(A3)"], horizontal=True, key="f3_rep")
     df = C.apply_filters(load_lines(ym_from, ym_to), f)
     if df.empty:
         st.info("此條件查無資料")
@@ -211,6 +211,11 @@ with tabs[2]:
         grids = L.layout_recognition(res, ym_from=t_from, ym_to=t_to)
         st.caption("每位業務一頁；列 = 合約 × 平台；A/B = 該合約全部線的實收／除佣；C = 非製作費線實付（舊版此欄一律印 0）；D = 製作費線實付；除佣-製作 = B − D。")
         _preview(grids, key="f3c", title="月業績認定表", period=f"{t_from}~{t_to}")
+    elif report == "獎金總表(製作成本分平台A3)":
+        bs = C.bonus_summary_platform_cost(df)
+        grids = L.layout_bonus_summary_platform_cost(bs, ym_from=t_from, ym_to=t_to, sales_text="/".join(f.salespeople) or "*", group_text="/".join(f.groups) or "*")
+        st.caption("同月獎金計算總表，但每平台同時列「除佣實收」與「製作成本」兩組欄；製作成本合計 = 7 個平台製作成本相加 = 原獎金總表的製作成本。A3 橫向。")
+        _preview(grids, key="f3d2", title="月獎金計算總表(製作成本分平台)", period=f"{t_from}~{t_to}")
     elif report.startswith("獎金總表"):
         bs = C.bonus_summary(df)
         grids = L.layout_bonus_summary(bs, ym_from=t_from, ym_to=t_to, sales_text="/".join(f.salespeople) or "*", group_text="/".join(f.groups) or "*")

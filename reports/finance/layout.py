@@ -313,6 +313,45 @@ def layout_bonus_summary(df: pd.DataFrame, *, ym_from: str, ym_to: str, sales_te
     return [g]
 
 
+# ---------------------------------------------------------------- 3d'. 月獎金計算總表（製作成本分平台，A3）
+BONUS_PC_W = [7, 9, 5] + [9] * 7 + [11, 11] + [9] * 7 + [11, 11]   # 3 + 7除佣 + 2 + 7製作 + 2 = 21 欄
+
+
+def layout_bonus_summary_platform_cost(df: pd.DataFrame, *, ym_from: str, ym_to: str, sales_text: str = "*", group_text: str = "*") -> list[Grid]:
+    """同 3d 月獎金計算總表，但每平台同時列「除佣實收」與「製作成本」兩組欄（A3 橫向）。"""
+    n = len(BONUS_PC_W)
+    g = Grid("月獎金計算總表(製作成本分平台)", widths=BONUS_PC_W, landscape=True, paper="A3", font_size=9, header_rows=3)
+    g.add([T(f"{ym_from} ~ {ym_to} 月獎金計算總表（製作成本分平台） 業務: {sales_text}", span=n - 5, cls="b big noborder left"),
+           T(f"組別: {group_text}", span=5, cls="b big noborder left")], "title")
+    # 表頭第一列：分群（除佣實收（分平台）／製作成本（分平台））
+    g.add([T("組別", cls="b ctr wrap", fill="lyellow", rowspan=2), T("業務", cls="b ctr wrap", fill="lyellow", rowspan=2), T("月份", cls="b ctr wrap", fill="lyellow", rowspan=2),
+           T("除佣實收（分平台）", span=7, cls="b ctr", fill="lyellow"),
+           T("實收金額", cls="b ctr wrap", fill="lyellow", rowspan=2), T("除佣實收", cls="b ctr wrap", fill="lyellow", rowspan=2),
+           T("製作成本（分平台）", span=7, cls="b ctr", fill="lorange"),
+           T("製作成本\n合計", cls="b ctr wrap", fill="lorange", rowspan=2), T("認定業績\n除佣-製作", cls="b ctr wrap", fill="lyellow", rowspan=2)], height=20)
+    # 表頭第二列：兩組平台名
+    g.add([T(p, cls="b ctr wrap", fill="lyellow") for p in C.FIN_PLATFORMS] + [T(p, cls="b ctr wrap", fill="lorange") for p in C.FIN_PLATFORMS], height=30)
+    for _, r in df.iterrows():
+        if r["kind"] == "total":
+            f = "cyan"
+            g.add([T(r["salesperson"], span=3, cls="b ctr", fill=f)]
+                  + [M(r[p], cls="b", fill=f) for p in C.FIN_PLATFORMS]
+                  + [M(r["gross"], cls="b", fill=f), M(r["net"], cls="b", fill=f)]
+                  + [M(r[f"{p}__pc"], cls="b", fill=f) for p in C.FIN_PLATFORMS]
+                  + [M(r["prod_cost"], cls="b", fill=f), M(r["recognized"], cls="b", fill=f)])
+            g.gap()
+        else:
+            g.add([T(r["group"], cls="ctr"), T(r["salesperson"], cls="ctr"), T(r["month"], cls="ctr")]
+                  + [M(r[p], cls=_PCOLOR[p]) for p in C.FIN_PLATFORMS]
+                  + [M(r["gross"]), M(r["net"])]
+                  + [M(r[f"{p}__pc"], cls=_PCOLOR[p]) for p in C.FIN_PLATFORMS]
+                  + [M(r["prod_cost"]), M(r["recognized"])], "kwn")
+    g.gap()
+    g.add([T("核准:", cls="right noborder"), T(ul=True, span=2)] + blanks(4, cls="noborder")
+          + [T("製表:", cls="right noborder"), T(ul=True, span=2)] + blanks(n - 10, cls="noborder"))
+    return [g]
+
+
 # ================================================================ 3e. 業務發稿統計報表 A3（PDF 第 20–21 頁）
 _WFILL = {"企頻": "lgreen", "新鮮視": "lpink", "廣播": "gold"}
 

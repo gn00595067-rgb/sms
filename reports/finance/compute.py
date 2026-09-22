@@ -389,6 +389,30 @@ def bonus_summary(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def bonus_summary_platform_cost(df: pd.DataFrame) -> pd.DataFrame:
+    """月獎金計算總表的加寬版：每平台同時給「除佣實收」（欄名＝平台名）與「製作成本」（欄名＝平台名＋'__pc'）。
+    平台製作成本 = 該平台（fin8）製作費線的實付；7 個平台製作成本相加 = 該列 prod_cost（與原獎金總表一致）。"""
+    d = df.sort_values(["_gk", "_sk", "ym"])
+    rows = []
+    for (g, sp), sdf in d.groupby(["business_group", "salesperson"], sort=False):
+        block = []
+        for ym, mdf in sdf.groupby("ym", sort=False):
+            r = {"group": g, "salesperson": sp, "month": ym[-2:], "kind": "row"}
+            for p in FIN_PLATFORMS:
+                r[p] = float(mdf.loc[mdf["fin8"] == p, "net_amount"].sum())
+                r[f"{p}__pc"] = float(mdf.loc[(mdf["fin8"] == p) & mdf["is_production"], "cost_amount"].sum())
+            r["gross"] = float(mdf["gross_amount"].sum())
+            r["net"] = float(mdf["net_amount"].sum())
+            r["prod_cost"] = float(mdf.loc[mdf["is_production"], "cost_amount"].sum())
+            r["recognized"] = r["net"] - r["prod_cost"]
+            block.append(r)
+        t = {"group": "", "salesperson": f"{sp} 合計", "month": "", "kind": "total"}
+        for k in FIN_PLATFORMS + [f"{p}__pc" for p in FIN_PLATFORMS] + ["gross", "net", "prod_cost", "recognized"]:
+            t[k] = sum(b[k] for b in block)
+        rows.extend(block + [t])
+    return pd.DataFrame(rows)
+
+
 # ---------------------------------------------------------------- 3e. 業務發稿統計 (A3)
 WAVE_PLATS = ["企頻", "新鮮視", "廣播"]
 

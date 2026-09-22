@@ -210,6 +210,28 @@ def test_bonus_summary_2026_08(raw08):
 
 
 @requires_db
+def test_bonus_summary_platform_cost_2026_08(raw08):
+    """製作成本分平台版：每平台除佣與原獎金總表相同；7 個平台製作成本相加 = 該列 prod_cost；認定不變。"""
+    from reports.finance import compute as C, grid as G, layout as L
+    base = C.bonus_summary(raw08)
+    pc = C.bonus_summary_platform_cost(raw08)
+    b = base[base["kind"] == "row"].set_index(["group", "salesperson", "month"])
+    p = pc[pc["kind"] == "row"].set_index(["group", "salesperson", "month"])
+    assert list(b.index) == list(p.index)                       # 列對齊
+    for i in b.index:                                            # 除佣欄逐平台一致 + 平台製作成本相加 = prod_cost
+        for plat in C.FIN_PLATFORMS:
+            assert round(p.loc[i, plat]) == round(b.loc[i, plat])
+        assert round(sum(p.loc[i, f"{plat}__pc"] for plat in C.FIN_PLATFORMS)) == round(p.loc[i, "prod_cost"])
+    r = p.loc[("東吳組", "陳絜心", "08")]                          # 陳絜心 2026/08 製作成本 = 23,380（見 test_bonus_summary）
+    assert round(r["prod_cost"]) == 23380
+    assert round(sum(r[f"{plat}__pc"] for plat in C.FIN_PLATFORMS)) == 23380
+    grids = L.layout_bonus_summary_platform_cost(pc, ym_from="2026/08", ym_to="2026/08")   # 版面可渲染
+    html = G.to_html(grids, title="x")
+    assert "除佣實收（分平台）" in html and "製作成本（分平台）" in html
+    assert G.to_xlsx(grids)[:2] == b"PK"
+
+
+@requires_db
 def test_sales_wave_stats_2026_09(raw09):
     """PDF 第 20 頁：陳絜心 客戶數 8 / 實收 3,190,273 / 除佣 2,965,473 / 毛利 1,438,051 / 企頻 17 波段；洪佳琪 7 / 12 波段 / 2,798,048 / 2,369,085 / 654,832 / 企頻 6。"""
     from reports.finance import compute as C
