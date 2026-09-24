@@ -28,6 +28,12 @@ FIELD_HELP: dict[str, str] = {
     "booked_cost": "實付＝實際付給媒體／通路的成本", "cost_amount": "實付＝實際付給媒體／通路的成本",
     "成本": "成本＝實際付給媒體／通路的實付金額", "實付": "實付＝實際付給媒體／通路的成本",
     "production_cost": "製作費＝廣告製作相關成本（非媒體採購）",
+    "line_type": ("線類型＝MEDIA 媒體發稿／PRODUCTION 製作費／INTERCOMPANY 內部轉撥。"
+                  "INTERCOMPANY（轉撥線）＝子公司（東吳／鉑霖）把媒體除佣實收的 65% 轉撥給母公司聲活："
+                  "聲活認列為營收、子公司同額認列為實付成本，故此線毛利率 100%；"
+                  "業績認定與客戶／業務排名不重複計入此線。"),
+    "線類型": ("線類型＝MEDIA 媒體發稿／PRODUCTION 製作費／INTERCOMPANY 內部轉撥。"
+               "INTERCOMPANY（轉撥線）＝子公司把媒體除佣實收的 65% 轉撥給聲活，此線毛利率 100%、不重複計業績。"),
     "group_profit": GROUP_MARGIN.split("；")[0], "集團毛利": GROUP_MARGIN.split("；")[0],
     "net_profit": NET_PROFIT,
     "recognized_amount": "認定業績＝交換併回原業務、依認列比例分給該業務的業績",
