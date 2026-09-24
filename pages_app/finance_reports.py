@@ -135,8 +135,42 @@ def _preview(grids: list[G.Grid], *, key: str, title: str, period: str, max_rows
     st.html("".join(G.grid_html(g) for g in grids_screen))
 
 
-# ------------------------------------------------------------------ 六個分頁
-tabs = st.tabs(["對帳表(業績vs會計帳)", "獎金總表(分平台成本)", "業績成本報表(區間)", "媒體發稿量分析", "成本毛利分析", "業績達成表", "三單查詢", "電台預付查詢", "說明"])
+def _bonus_deal_grids(out, *, period: str, gtext: str, stext: str) -> list[G.Grid]:
+    """逐案獎金分攤 → 一張 Grid：依業務分區、業務小計、總計；逐案加總 == 月獎金總表。"""
+    widths = [10, 14, 30, 12, 13, 7, 13, 12]
+    g = G.Grid("業務獎金(逐案)", widths=widths, landscape=True, paper="A4")
+    g.title(f"{period}　業務獎金（逐案分攤）　組別: {gtext}　業務: {stext}", span=8)
+    heads = ["業務", "合約編號", "客戶", "平台歸類", "除佣實收", "獎金%", "分攤獎金", "備註"]
+    g.add([G.Cell(h, "text", cls="b ctr", fill="grey") for h in heads], "head")
+    g.header_rows = 2
+
+    def _pct_text(r):
+        if r["rule_status"] == "混合%":
+            return "混合"
+        p = r["bonus_pct"]
+        return "" if p is None or pd.isna(p) else f"{float(p):g}%"
+
+    grand_net = grand_bonus = 0.0
+    for sp in sorted(out["salesperson"].dropna().unique(), key=C.zh_key):
+        sdf = out[out["salesperson"] == sp]
+        for _, r in sdf.iterrows():
+            note = r["rule_status"] + ("・未達門檻" if r["rule_status"] == "" and r["bonus_amount"] == 0 else "")
+            g.add([G.Cell(sp), G.Cell(r["contract_no"]), G.Cell(r["customer"]),
+                   G.Cell(r["platform_group"]), G.Cell(r["net_amount"], "money"),
+                   G.Cell(_pct_text(r), "text", cls="ctr"), G.Cell(r["bonus_amount"], "money"),
+                   G.Cell(note, "text", cls="small grey")])
+        s_net, s_bonus = float(sdf["net_amount"].sum()), float(sdf["bonus_amount"].sum())
+        grand_net += s_net
+        grand_bonus += s_bonus
+        g.add([G.Cell(f"{sp} 小計", span=4, cls="b right"), G.Cell(s_net, "money", cls="b"),
+               G.Cell("", cls="ctr"), G.Cell(s_bonus, "money", cls="b"), G.Cell("")], "total")
+    g.add([G.Cell("總計", span=4, cls="b right", fill="yellow"), G.Cell(grand_net, "money", cls="b", fill="yellow"),
+           G.Cell("", fill="yellow"), G.Cell(grand_bonus, "money", cls="b", fill="yellow"), G.Cell("", fill="yellow")], "total")
+    return [g]
+
+
+# ------------------------------------------------------------------ 分頁
+tabs = st.tabs(["對帳表(業績vs會計帳)", "獎金總表(分平台成本)", "業績成本報表(區間)", "媒體發稿量分析", "成本毛利分析", "業績達成表", "業務獎金(逐案)", "三單查詢", "電台預付查詢", "說明"])
 
 # 業績成本報表(區間)
 with tabs[2]:
@@ -260,8 +294,46 @@ with tabs[5]:
                    "小計 = 業績類別、合計 = 業務、總計 = 組別。舊版把製作費藏在隱藏列、只在小計出現；新版直接放在合約列上。")
         _preview(grids, key="f4", title="月責任檔業績達成表", period=f"{t_from}~{t_to}")
 
-# 三單查詢
+# 業務獎金(逐案)
 with tabs[6]:
+    st.markdown("#### 業務獎金（逐案分攤）")
+    ym_from, ym_to, t_from, t_to = _period_bar("fbd")
+    opts = option_lists(ym_from, ym_to)
+    f = _filters("fbd", opts, ["groups", "salespeople"])
+    # 月獎金真相源 v_bonus_simple；合約層除佣（口徑同 v_bonus_simple：只 MEDIA、排除轉撥）
+    bucket = query_df("select perf_ym, salesperson, business_group, platform_group, sales_item, "
+                      "net_amount, bonus_amount, bonus_pct, threshold_amount from v_bonus_simple "
+                      "where perf_ym between %s and %s", (ym_from, ym_to))
+    contract = query_df(
+        "select perf_ym, to_char(perf_ym,'YYYY/MM') as perf_ym_text, salesperson, business_group, "
+        "platform_group, sales_item, contract_no, max(customer) as customer, sum(net_amount) as net_amount "
+        "from v_deal_line_flat where perf_ym between %s and %s and line_type='MEDIA' "
+        "and not coalesce(group_is_intercompany, false) "
+        "group by perf_ym, salesperson, business_group, platform_group, sales_item, contract_no",
+        (ym_from, ym_to))
+    bucket = bucket if bucket is not None else pd.DataFrame()
+    contract = contract if contract is not None else pd.DataFrame()
+    if f.groups:
+        bucket = bucket[bucket["business_group"].isin(f.groups)] if not bucket.empty else bucket
+        contract = contract[contract["business_group"].isin(f.groups)] if not contract.empty else contract
+    if f.salespeople:
+        bucket = bucket[bucket["salesperson"].isin(f.salespeople)] if not bucket.empty else bucket
+        contract = contract[contract["salesperson"].isin(f.salespeople)] if not contract.empty else contract
+    from reports.bonus_deal import allocate_bonus_by_deal
+    out = allocate_bonus_by_deal(bucket, contract)
+    if out.empty:
+        st.info("此條件查無資料")
+    else:
+        gtext = "/".join(f.groups) or "*"
+        stext = "/".join(f.salespeople) or "*"
+        grids = _bonus_deal_grids(out, period=f"{t_from}~{t_to}", gtext=gtext, stext=stext)
+        st.caption("方案 A：月獎金（v_bonus_simple：業務×平台歸類×業績項目×生效%×當月門檻）依各合約除佣佔比分攤到逐合約，"
+                   "用最大餘數法讓**逐案加總 = 月獎金總表**。門檻是月口徑：某格當月未達門檻→該格獎金 0→逐案皆 0。"
+                   "只 MEDIA、排除轉撥；無規則者標「未設定規則」。第一層業務獎金，主管/協辦/加碼未含。")
+        _preview(grids, key="fbd", title="業務獎金(逐案分攤)", period=f"{t_from}~{t_to}")
+
+# 三單查詢
+with tabs[7]:
     st.markdown("#### 三單查詢")
     c1, c2, c3 = st.columns([2, 2, 3])
     contract_no = c1.text_input("合約編號", key="f5_cue", placeholder="例：1150622").strip()
@@ -305,7 +377,7 @@ with tabs[6]:
                 _preview(grids, key="f5b", title=f"發票開立申請單_{contract_no}", period=contract_no)
 
 # 電台預付查詢
-with tabs[7]:
+with tabs[8]:
     st.markdown("#### 電台預付查詢")
     today = date.today()
     c1, c2, c3, c4 = st.columns([2, 2, 2, 2])
@@ -374,7 +446,7 @@ with tabs[0]:
         _preview(grids, key="frc", title=f"對帳表_{grp_text}", period=f"{t_from}~{t_to}")
 
 # 8 ---------------------------------------------------------------- 說明
-with tabs[8]:
+with tabs[9]:
     st.markdown("#### 說明")
     st.markdown(
         "本專區把舊 Access 業績系統仍在用的六個財務功能，用資料庫即時算、版型與數字 100% 重現。"
