@@ -356,20 +356,22 @@ with tabs[0]:
     ym_from, ym_to, t_from, t_to = _period_bar("frc")
     opts = option_lists(ym_from, ym_to)
     groups = opts.get("business_group", [])
-    default_i = groups.index("東吳組") if "東吳組" in groups else 0
-    grp = st.selectbox("組別", groups, index=default_i, key="frc_grp") if groups else None
+    grps = st.multiselect("組別（可多選，會合併呈現；聲活真正營收＝聲活組＋聲活-東＋聲活-鉑）",
+                          groups, default=[], key="frc_grp",
+                          placeholder="全部（不選＝所有組別合併）")
+    grp_text = "＋".join(grps) if grps else "全部"
     lines = load_lines(ym_from, ym_to)
-    if grp:
-        lines = lines[lines["business_group"] == grp]
+    if grps:
+        lines = lines[lines["business_group"].isin(grps)]
     if lines.empty:
         st.info("此條件查無資料")
     else:
         res = C.reconciliation(lines)
-        grids = L.layout_reconciliation(res, ym_from=t_from, ym_to=t_to, group_text=grp or "*")
+        grids = L.layout_reconciliation(res, ym_from=t_from, ym_to=t_to, group_text=grp_text)
         st.caption("全部由業績系統（v_finance_line）推算：**會計帳收入 = 除傭實收 − 交換**；**會計帳成本 = 實付金額 − 製作費 − 交換未認成本**；"
                    "折讓 = Σ(實付 × 電台現金折扣%)、現% = 折讓 ÷ 實付；交換 = 廣告交換線（is_barter）的除傭實收（不列入會計帳收入）。"
                    "數字為當前資料庫快照，與手工底稿可能因抓取日不同而有差（例：新鮮視）。")
-        _preview(grids, key="frc", title=f"對帳表_{grp or '全部'}", period=f"{t_from}~{t_to}")
+        _preview(grids, key="frc", title=f"對帳表_{grp_text}", period=f"{t_from}~{t_to}")
 
 # 8 ---------------------------------------------------------------- 說明
 with tabs[8]:
